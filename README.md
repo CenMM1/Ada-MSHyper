@@ -37,7 +37,12 @@ python train.py -data traffic -input_size 168 -predict_step 168 -root_path ./dat
 We conduct extensive experiments to evaluate the performance and efficiency of Ada-MSHyper, covering long-range, short-range, and ultra-long-range time series forecasting, including 11 real-world benchmarks and 13 baselines.
 
 **🏆 Ada-MSHyper achieves consistent state-of-the-art performance on all benchmarks**, covering a large variety of series with different frequencies, variate numbers and real-world scenarios.
+## 5.1 Long-range forecasting
+### 5.1.1 Long-range forecasting under multivariate settings.
 ![long-range-multivariate](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/long-range.png)
+### 5.2 Long-range forecasting under univariate settings.
 ![long-range-univariate](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/longe-range-univariate.png)
+## 5.2 Short-range forecasting
 ![short-range](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/short-range.png)
+## 5.3 Ultra-long-range forecasting
 ![Ultra-long-range](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/Ultra-long-range.png)
