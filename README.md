@@ -35,6 +35,6 @@ python train.py -data traffic -input_size 168 -predict_step 168 -root_path ./dat
 ```
 # 5 Main results
 ![long-range-multivariate](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/long-range.png)
-![long-range-univariate](https://github.com/shangzongjiang/MSHyper/blob/main/fig/table2.png)
-![short-range](https://github.com/shangzongjiang/MSHyper/blob/main/fig/table1.png) 
-![Ultra-long-range](https://github.com/shangzongjiang/MSHyper/blob/main/fig/table1.png) 
+![long-range-univariate](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/longe-range-univariate.png)
+![short-range](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/short-range.png)
+![Ultra-long-range](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/Ultra-long-range.png)
