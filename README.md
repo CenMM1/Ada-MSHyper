@@ -34,6 +34,9 @@ python train.py -data ETTm1 -input_size 168 -predict_step 168 -root_path ./data/
 python train.py -data traffic -input_size 168 -predict_step 168 -root_path ./data/Traffic/ -data_path traffic.csv -CSCM Conv_Construct
 ```
 # 5 Main results
+We conduct extensive experiments to evaluate the performance and efficiency of Ada-MSHyper, covering long-range, short-range, and ultra-long-range time series forecasting, including 11 real-world benchmarks and 13 baselines.
+
+**🏆 Ada-MSHyper achieves consistent state-of-the-art performance on all benchmarks**, covering a large variety of series with different frequencies, variate numbers and real-world scenarios.
 ![long-range-multivariate](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/long-range.png)
 ![long-range-univariate](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/longe-range-univariate.png)
 ![short-range](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/short-range.png)
