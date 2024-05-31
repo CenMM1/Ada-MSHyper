@@ -1,6 +1,8 @@
 # <div align="center"> Ada-MSHyper: Adaptive Multi-Scale Hypergraph Transformer for Time Series Forecasting
 ✨ This repo is the official implementation of Adaptive Multi-Scale Hypergraph Transformer for Time Series Forecasting.
 # 1 The framework of Ada-MSHyper
+Ada-MSHyper is proposed to promote more comprehensive pattern interactions at different scales, which consist of four main parts: **Multi-scale Feature Extraction (MFE) Module**, **Adaptive Hypergraph Learning (AHL) Module**, **Multi-Scale Interaction Module**, and **Multi-Scale Fusion Module**. The overall framework of Ada-MSHyper is shown as follows:
+![framework](https://github.com/shangzongjiang/MSHyper/blob/main/fig/figure1.png)
 # 2 Prerequisites
 
 * Python 3.8.5
@@ -15,6 +17,7 @@ You can download the all datasets from [datasets](https://drive.google.com/u/0/u
 ## 4.2 Download the dataset
 
 ## 4.3 Training
+🚀
 ```python
 # Train on Weather
 python train.py -data weather -input_size 168 -predict_step 168 -root_path ./data/ETT/ -data_path weather.csv -CSCM Conv_Construct
