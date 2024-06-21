@@ -9,7 +9,7 @@ Ada-MSHyper is proposed to promote more comprehensive pattern interactions at di
 * PyTorch 1.13.1
 * math, sklearn, numpy, torch_geometric
 # 3 Datasets && Description
-
+![dataset-statistics](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/dataset%20statistics.png)
 📦 You can download the all datasets from [datasets](https://drive.google.com/u/0/uc?id=1NF7VEefXCmXuWNbnNe858WvQAkJ_7wuP&export=download). **All the datasets are well pre-processed** and can be used directly.
 # 4 Running
 ## 4.1 Install all dependencies listed in prerequisites
@@ -18,20 +18,41 @@ Ada-MSHyper is proposed to promote more comprehensive pattern interactions at di
 
 ## 4.3 Training
 🚀 We provide the experiment scripts of Ada-MSHyper on all dataset under the folder `./scripts`. You can obtain the full results by running the following command:
-```sh
+```
+# Train on ETTh1
+sh ./scripts/Long-range/ETTh1.sh
+# Train on ETTh2
+sh ./scripts/Long-range/ETTh2.sh
+# Train on ETTm1
+sh ./scripts/Long-range/ETTm1.sh
+# Train on ETTm2
+sh ./scripts/Long-range/ETTm2.sh
+# Train on Traffic
+sh ./scripts/Long-range/traffic.sh
+# Train on Electricity
+sh ./scripts/Long-range/electricity.sh
+# Train on Weather
+sh ./scripts/Long-range/traffic.sh
+
 ```
 or obtain specific results by runinng the following command:
 ```python
-# Train on Weather
-python train.py -data weather -input_size 96 -predict_step 96 -root_path ./data/ETT/ -data_path weather.csv -CSCM Conv_Construct
 # Train on Electricity
-python train.py -data elect -input_size 96 -predict_step 96 -root_path ./data/Electricity/ -data_path electricity.csv -CSCM Conv_Construct
+python run_longExp.py -data elect -input_size 96 -predict_step 96 -root_path ./data/Electricity/ -data_path electricity.csv -CSCM Conv_Construct
 # Train on ETTh1
-python train.py -data ETTh1 -input_size 96 -predict_step 96 -root_path ./data/ETT/ -data_path ETTh1.csv -CSCM Conv_Construct
+python -u run_longExp.py --is_training 1 --root_path ./dataset/ --data_path ETTh1.csv --model_id ETTh1_96_192 --model ASHyper --CSCM Bottleneck_Construct --data ETTh1 --features M --seq_len 96 --pred_len 192 --enc_in 7 --des 'Exp' --itr 1 --batch_size 16 --learning_rate 0.0001
+# Train on ETTh2
+python -u run_longExp.py --is_training 1 --root_path ./dataset/ --data_path ETTh2.csv --model_id ETTh2_96_96 --model ASHyper --CSCM Bottleneck_Construct --data ETTh2 --features M --seq_len 96 --pred_len 96 --enc_in 7 --des 'Exp' --itr 1 --batch_size 32 --learning_rate 0.0001
 # Train on ETTm1
-python train.py -data ETTm1 -input_size 96 -predict_step 96 -root_path ./data/ETT/ -data_path ETTm1.csv -CSCM Conv_Construct
+python -u run_longExp.py --is_training 1 --root_path ./dataset/ --data_path ETTm1.csv --model_id ETTm1_96_96 --model ASHyper --CSCM Bottleneck_Construct --data ETTm1 --features M --seq_len 96 --pred_len 96 --enc_in 7 --des 'Exp' --itr 1 --batch_size 8 --learning_rate 0.0001
+# Train on ETTm2
+python -u run_longExp.py --is_training 1 --root_path ./dataset/ --data_path ETTm2.csv --model_id ETTm2_96_96 --model ASHyper --CSCM Bottleneck_Construct --data ETTm2 --features M --seq_len 96 --pred_len 96 --enc_in 7 --des 'Exp' --itr 1 --batch_size 32 --learning_rate 0.001
 # Train on Traffic
-python train.py -data traffic -input_size 96 -predict_step 96 -root_path ./data/Traffic/ -data_path traffic.csv -CSCM Conv_Construct
+python -u run_longExp.py --is_training 1 --root_path ./dataset/ --data_path traffic.csv --model_id traffic_96_96 --model ASHyper --CSCM Bottleneck_Construct --data custom --features M --seq_len 96 --pred_len 96 --enc_in 862 --des 'Exp' --itr 1 --batch_size 16 --learning_rate 0.0001
+# Train on Electricity
+python run_longExp.py --is_training 1 --root_path ./dataset/ --data_path electricity.csv --model_id elect_96_96 --model ASHyper --CSCM Bottleneck_Construct  --data custom --features M --seq_len 96 --pred_len 96 --enc_in 321 --des 'Exp' --itr 1 --batch_size 16 --learning_rate 0.0001
+# Train on Weather
+python -u run_longExp.py --is_training 1 --root_path ./dataset/ --data_path weather.csv --model_id weather_96_96 --model ASHyper --CSCM Bottleneck_Construct --data custom --features M --seq_len 96 --pred_len 96 --enc_in 21 --des 'Exp' --itr 1 --batch_size 16 --learning_rate 0.0001
 ```
 # 5 Main results
 We conduct extensive experiments to evaluate the performance and efficiency of Ada-MSHyper, covering long-range, short-range, and ultra-long-range time series forecasting, including 11 real-world benchmarks and 13 baselines.
@@ -40,9 +61,13 @@ We conduct extensive experiments to evaluate the performance and efficiency of A
 ## 5.1 Long-range forecasting
 ### 5.1.1 Long-range forecasting under multivariate settings.
 ![long-range-multivariate](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/long-range.png)
+![full-long-range-multivariate](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/full-long-multivariate.png)
 ### 5.2 Long-range forecasting under univariate settings.
 ![long-range-univariate](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/longe-range-univariate.png)
+![full-long-range-univariate](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/full-long-univariate.png)
 ## 5.2 Short-range forecasting
 ![short-range](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/short-range.png)
+![short-range](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/full-short.png)
 ## 5.3 Ultra-long-range forecasting
 ![Ultra-long-range](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/Ultra-long-range.png)
+![full-Ultra-long-range](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/full-Ultra.png)
