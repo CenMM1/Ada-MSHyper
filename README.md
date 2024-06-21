@@ -23,15 +23,15 @@ Ada-MSHyper is proposed to promote more comprehensive pattern interactions at di
 or obtain specific results by runinng the following command:
 ```python
 # Train on Weather
-python train.py -data weather -input_size 168 -predict_step 168 -root_path ./data/ETT/ -data_path weather.csv -CSCM Conv_Construct
+python train.py -data weather -input_size 96 -predict_step 96 -root_path ./data/ETT/ -data_path weather.csv -CSCM Conv_Construct
 # Train on Electricity
-python train.py -data elect -input_size 168 -predict_step 168 -root_path ./data/Electricity/ -data_path electricity.csv -CSCM Conv_Construct
+python train.py -data elect -input_size 96 -predict_step 96 -root_path ./data/Electricity/ -data_path electricity.csv -CSCM Conv_Construct
 # Train on ETTh1
-python train.py -data ETTh1 -input_size 168 -predict_step 168 -root_path ./data/ETT/ -data_path ETTh1.csv -CSCM Conv_Construct
+python train.py -data ETTh1 -input_size 96 -predict_step 96 -root_path ./data/ETT/ -data_path ETTh1.csv -CSCM Conv_Construct
 # Train on ETTm1
-python train.py -data ETTm1 -input_size 168 -predict_step 168 -root_path ./data/ETT/ -data_path ETTm1.csv -CSCM Conv_Construct
+python train.py -data ETTm1 -input_size 96 -predict_step 96 -root_path ./data/ETT/ -data_path ETTm1.csv -CSCM Conv_Construct
 # Train on Traffic
-python train.py -data traffic -input_size 168 -predict_step 168 -root_path ./data/Traffic/ -data_path traffic.csv -CSCM Conv_Construct
+python train.py -data traffic -input_size 96 -predict_step 96 -root_path ./data/Traffic/ -data_path traffic.csv -CSCM Conv_Construct
 ```
 # 5 Main results
 We conduct extensive experiments to evaluate the performance and efficiency of Ada-MSHyper, covering long-range, short-range, and ultra-long-range time series forecasting, including 11 real-world benchmarks and 13 baselines.
