@@ -71,3 +71,5 @@ We conduct extensive experiments to evaluate the performance and efficiency of A
 ## 5.3 Ultra-long-range forecasting
 ![Ultra-long-range](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/Ultra-long-range.png)
 ![full-Ultra-long-range](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/full-Ultra.png)
+
+## The code and documentation are still being finalized, and the final version will be released after the conference.
