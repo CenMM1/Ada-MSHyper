@@ -79,11 +79,8 @@ If you have any questions, please feel free to contact zongjiangshang@cs.zju.edu
 # Other works
 📝 Our other works are shown as follows：
 
-Single-step forecasting：
-
-Chen L, Chen D, Shang Z, et al. Multi-scale adaptive graph neural network for multivariate time series forecasting. TKDE, 2023, 35(10): 10748-10761.
-
-![Code Link](https://github.com/shangzongjiang/MAGNN)
+Single-step forecasting：Chen L, Chen D, Shang Z, et al. Multi-scale adaptive graph neural network for multivariate time series forecasting. TKDE, 2023, 35(10): 10748-10761.
+[Code Link](https://github.com/shangzongjiang/MAGNN)
 
 AutoML related forecasting：
 
