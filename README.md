@@ -73,28 +73,6 @@ We conduct extensive experiments to evaluate the performance and efficiency of A
 ![full-Ultra-long-range](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/full-Ultra.png)
 # Citation 
 😀 If you find this repo useful, please cite our paper.
-
-# Concat
-If you have any questions, please feel free to contact zongjiangshang@cs.zju.edu.cn
-# Other works
-📝 Our other works are shown as follows：
-
-Single-step forecasting：Chen L, Chen D, Shang Z, et al. Multi-scale adaptive graph neural network for multivariate time series forecasting. TKDE, 2023, 35(10): 10748-10761.
-[Code Link](https://github.com/shangzongjiang/MAGNN)
-
-AutoML related forecasting：
-
-Chen D, Chen L, Shang Z, et al. Scale-aware neural architecture search for multivariate time series forecasting. TKDD, 2024.
-
-![Code Link](https://github.com/shangzongjiang/SNAS4MTF)
-
-Long-range time series forecasting:
-
-Shang Z, Chen L, Wu B, et al. MSHyper: Multi-Scale Hypergraph Transformer for Long-Range Time Series Forecasting. arXiv, 2024: arXiv: 2401.09261.
-
-![Code Link](https://github.com/shangzongjiang/MSHyper)
-
-
 ```
 @inproceedings{shangada,
   title={Ada-MSHyper: Adaptive Multi-Scale Hypergraph Transformer for Time Series Forecasting},
@@ -103,5 +81,19 @@ Shang Z, Chen L, Wu B, et al. MSHyper: Multi-Scale Hypergraph Transformer for Lo
   year={2024}
 }
 ```
+# Concat
+If you have any questions, please feel free to contact zongjiangshang@cs.zju.edu.cn
+# Other works
+📝 Our other works are shown as follows：
+
+Single-step forecasting：Chen L, Chen D, Shang Z, et al. Multi-scale adaptive graph neural network for multivariate time series forecasting. TKDE, 2023, 35(10): 10748-10761.
+[Code Link](https://github.com/shangzongjiang/MAGNN)
+
+AutoML related forecasting：Chen D, Chen L, Shang Z, et al. Scale-aware neural architecture search for multivariate time series forecasting. TKDD, 2024. [Code Link](https://github.com/shangzongjiang/SNAS4MTF)
+
+Long-range time series forecasting: Shang Z, Chen L, Wu B, et al. MSHyper: Multi-Scale Hypergraph Transformer for Long-Range Time Series Forecasting. arXiv, 2024: arXiv: 2401.09261. [Code Link](https://github.com/shangzongjiang/MSHyper)
+
+
+
 
 ## The code and documentation are still being finalized, and the final version will be released after the conference.
