@@ -96,13 +96,10 @@ If you have any questions, please feel free to contact zongjiangshang@cs.zju.edu
 
 **AutoML related forecasting**: Chen D, Chen L, Shang Z, et al. Scale-aware neural architecture search for multivariate time series forecasting. TKDD, 2024. [Code Link](https://github.com/shangzongjiang/SNAS4MTF)
 
-**Long-range time series forecasting**: Shang Z, Chen L, Wu B, et al. MSHyper: Multi-Scale Hypergraph Transformer for Long-Range Time Series Forecasting. arXiv, 2024: arXiv: 2401.09261
-        
-        
-        
-        . Code Link](https://github.com/shangzongjiang/MSHyper)
+**Long-range time series forecasting**: Shang Z, Chen L, Wu B, et al. MSHyper: Multi-Scale Hypergraph Transformer for Long-Range Time Series Forecasting. arXiv, 2024: arXiv: 2401.09261. 
+[Code Link](https://github.com/shangzongjiang/MSHyper)
 
 
 
 
-## The code and documentation are still being finalized, and the final version will be released after the conference.
+
