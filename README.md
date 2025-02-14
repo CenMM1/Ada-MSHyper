@@ -75,7 +75,7 @@ We conduct extensive experiments to evaluate the performance and efficiency of A
 ![full-Ultra-long-range](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/full-Ultra.png)
 
 ## 5.4 Visualization
-![Ultra-long-range](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/visualization.png)
+![Visualization](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/Visualization.png)
 # Citation 
 😀 If you find this repo useful, please cite our paper.
 ```
@@ -97,6 +97,8 @@ If you have any questions, please feel free to contact zongjiangshang@cs.zju.edu
 **AutoML related forecasting**: Chen D, Chen L, Shang Z, et al. Scale-aware neural architecture search for multivariate time series forecasting. TKDD, 2024. [Code Link](https://github.com/shangzongjiang/SNAS4MTF)
 
 **Long-range time series forecasting**: Shang Z, Chen L, Wu B, et al. MSHyper: Multi-Scale Hypergraph Transformer for Long-Range Time Series Forecasting. arXiv, 2024: arXiv: 2401.09261
+        
+        
         
         . Code Link](https://github.com/shangzongjiang/MSHyper)
 
