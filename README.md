@@ -8,6 +8,7 @@ Ada-MSHyper is proposed to promote more comprehensive pattern interactions at di
 * Python 3.8.5
 * PyTorch 1.13.1
 * math, sklearn, numpy, torch_geometric
+  
 ⚠️ Note: Due to version discrepancies, you may encounter the following error: "RuntimeError: The size of tensor a (16) must match the size of tensor b (96) at non-singleton dimension 1." To resolve this issue, replace the **message_passing.py** file with the corresponding version provided in the **utils** directory.
 # 3 Datasets && Description
 ![dataset-statistics](https://github.com/shangzongjiang/Ada-MSHyper/blob/main/figures/dataset%20statistics.png)
