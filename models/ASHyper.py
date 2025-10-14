@@ -14,7 +14,7 @@ from math import sqrt
 from .Layers import EncoderLayer, Decoder, Predictor
 from .Layers import Bottleneck_Construct, Conv_Construct, MaxPooling_Construct, AvgPooling_Construct
 # from .Layers import get_mask, get_subsequent_mask, refer_points, get_k_q, get_q_k
-from .embed import DataEmbedding, CustomEmbedding,DataEmbedding_new
+# from .embed import DataEmbedding, CustomEmbedding,DataEmbedding_new
 from torch_geometric.utils import scatter
 import math
 
@@ -31,7 +31,7 @@ class Model(nn.Module):
         self.pred_len = configs.pred_len
         configs.device = torch.device("cuda")
         self.channels = configs.enc_in
-        self.individual = configs.individual
+        self.individual = getattr(configs, 'individual', False)
         if self.individual:
             self.Linear = nn.ModuleList()
             for i in range(self.channels):
@@ -44,7 +44,7 @@ class Model(nn.Module):
 
         self.all_size=get_mask(configs.seq_len, configs.window_size)
         self.Ms_length = sum(self.all_size)
-        self.conv_layers = eval(configs.CSCM)(configs.enc_in, configs.window_size, configs.enc_in)
+        self.conv_layers = Bottleneck_Construct(configs.enc_in, configs.window_size, configs.enc_in)
         self.out_tran = nn.Linear(self.Ms_length, self.pred_len)
         self.out_tran.weight=nn.Parameter((1/self.Ms_length)*torch.ones([self.pred_len,self.Ms_length]))
         self.chan_tran=nn.Linear(configs.d_model,configs.enc_in)
@@ -273,11 +273,11 @@ class multi_adaptive_hypergraoh(nn.Module):
         super(multi_adaptive_hypergraoh, self).__init__()
         self.seq_len = configs.seq_len
         self.window_size=configs.window_size
-        self.inner_size=configs.inner_size
+        self.inner_size=getattr(configs, 'inner_size', 5)
         self.dim=configs.d_model
         self.hyper_num=configs.hyper_num
         self.alpha=3
-        self.k=configs.k
+        self.k=getattr(configs, 'k', 3)
         self.embedhy=nn.ModuleList()
         self.embednod=nn.ModuleList()
         self.linhy=nn.ModuleList()
@@ -323,10 +323,16 @@ class multi_adaptive_hypergraoh(nn.Module):
             result_list = [list(torch.nonzero(matrix_array[:, col]).flatten().tolist()) for col in
                            range(matrix_array.shape[1])]
 
-            node_list = torch.cat([torch.tensor(sublist) for sublist in result_list if len(sublist) > 0]).tolist()
-            count_list = list(torch.sum(adj, dim=0).tolist())
-            hperedge_list = torch.cat([torch.full((count,), idx) for idx, count in enumerate(count_list, start=0)]).tolist()
+            if result_list:
+                node_list = torch.cat([torch.tensor(sublist) for sublist in result_list if len(sublist) > 0]).tolist()
+                count_list = list(torch.sum(adj, dim=0).tolist())
+                hperedge_list = torch.cat([torch.full((count,), idx) for idx, count in enumerate(count_list, start=0)]).tolist()
+            else:
+                # 如果没有有效的超边，创建一个默认的
+                node_list = [0]
+                hperedge_list = [0]
             hypergraph=np.vstack((node_list,hperedge_list))
+            hypergraph = torch.tensor(hypergraph, dtype=torch.long)
             hyperedge_all.append(hypergraph)
 
         return hyperedge_all

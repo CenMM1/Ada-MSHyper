@@ -9,13 +9,14 @@ data_dict = {
     'custom': Dataset_Custom,
      'PEMS': Dataset_PEMS,
     'Solar': Dataset_Solar,
+    'weather': Dataset_Custom,
 }
 
 
 def data_provider(args, flag):
     Data = data_dict[args.data]
-    timeenc = 0 if args.embed != 'timeF' else 1
-    train_only = args.train_only
+    timeenc = 0 if getattr(args, 'embed', 'timeF') != 'timeF' else 1
+    train_only = getattr(args, 'train_only', False)
 
     if flag == 'test':
         shuffle_flag = False
