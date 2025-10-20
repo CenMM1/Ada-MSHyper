@@ -44,6 +44,10 @@ parser.add_argument('--itr', type=int, default=1, help='experiments times')
 # Other config
 parser.add_argument('--window_size', type=str, default=[2, 2])
 parser.add_argument('--hyper_num', type=str, default=[50, 20, 10])
+parser.add_argument('--hyper_num_text', type=int, default=50, help='text modality hyperedges')
+parser.add_argument('--hyper_num_audio', type=int, default=20, help='audio modality hyperedges')
+parser.add_argument('--k', type=int, default=3, help='top-k hyperedges per node')
+parser.add_argument('--num_classes', type=int, default=10, help='number of classes')
 parser.add_argument('--num_workers', type=int, default=0, help='data loader workers')
 
 args = parser.parse_args()
