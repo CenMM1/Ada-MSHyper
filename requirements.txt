@@ -1,4 +1,0 @@
-numpy
-pandas
-torch==1.13.1
-torch-geometric
