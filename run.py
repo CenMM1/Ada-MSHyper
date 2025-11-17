@@ -3,49 +3,41 @@ import torch
 from exp.exp_main import Exp_Main
 
 # Set random seed
-torch.manual_seed(2021)
+torch.manual_seed(2024)
 
 # Argument parser
-parser = argparse.ArgumentParser(description='ASHyper Time Series Forecasting')
+parser = argparse.ArgumentParser(description='BimodalClassifier Multimodal Classification')
 
 # Basic config
 parser.add_argument('--is_training', type=int, default=1, help='1: training, 0: testing')
-parser.add_argument('--model_id', type=str, default='weather_test', help='model id')
-parser.add_argument('--model', type=str, default='ASHyper', help='model name')
+parser.add_argument('--model_id', type=str, default='multimodal_test', help='model id')
+parser.add_argument('--model', type=str, default='BimodalClassifier', help='model name')
 
 # Data config
-parser.add_argument('--data', type=str, default='weather', help='dataset type')
-parser.add_argument('--root_path', type=str, default='./compressed_data', help='root path')
-parser.add_argument('--data_path', type=str, default='weather.csv', help='data file')
-parser.add_argument('--features', type=str, default='M', help='M: multivariate')
-parser.add_argument('--target', type=str, default='OT', help='target feature')
-parser.add_argument('--freq', type=str, default='h', help='frequency')
+parser.add_argument('--data', type=str, default='multimodal', help='dataset type')
+parser.add_argument('--root_path', type=str, default='./data', help='root path')
+parser.add_argument('--data_path', type=str, default='multimodal_data', help='data file')
 
 # Model config
-parser.add_argument('--seq_len', type=int, default=12, help='input sequence length')
-parser.add_argument('--label_len', type=int, default=6, help='label length')
-parser.add_argument('--pred_len', type=int, default=12, help='prediction length')
-parser.add_argument('--enc_in', type=int, default=21, help='encoder input size')
-parser.add_argument('--c_out', type=int, default=21, help='output size')
-parser.add_argument('--d_model', type=int, default=16, help='model dimension')
-parser.add_argument('--n_heads', type=int, default=1, help='num of heads')
-parser.add_argument('--e_layers', type=int, default=1, help='num of encoder layers')
-parser.add_argument('--d_layers', type=int, default=1, help='num of decoder layers')
-parser.add_argument('--d_ff', type=int, default=64, help='feed forward dimension')
-parser.add_argument('--dropout', type=float, default=0.05, help='dropout')
+parser.add_argument('--d_model', type=int, default=128, help='model dimension')
+parser.add_argument('--dropout', type=float, default=0.1, help='dropout')
+# HypergraphConv attention config (for ablation)
+parser.add_argument('--hyper_heads', type=int, default=1,
+                    help='number of attention heads in HypergraphConv (must divide d_model)')
+parser.add_argument('--hyper_multi_head_attention', type=int, default=0,
+                    help='use true multi-head hypergraph attention (1) or single-head (0)')
 
 # Training config
-parser.add_argument('--batch_size', type=int, default=512, help='batch size')
-parser.add_argument('--learning_rate', type=float, default=0.1, help='learning rate')
-parser.add_argument('--train_epochs', type=int, default=1, help='train epochs')
-parser.add_argument('--patience', type=int, default=3, help='early stopping patience')
+parser.add_argument('--batch_size', type=int, default=32, help='batch size')
+parser.add_argument('--learning_rate', type=float, default=1e-4, help='learning rate')
+parser.add_argument('--train_epochs', type=int, default=50, help='train epochs')
+parser.add_argument('--patience', type=int, default=5, help='early stopping patience')
 parser.add_argument('--itr', type=int, default=1, help='experiments times')
 
-# Other config
-parser.add_argument('--window_size', type=str, default=[2, 2])
-parser.add_argument('--hyper_num', type=str, default=[50, 20, 10])
+# Model specific config
 parser.add_argument('--hyper_num_text', type=int, default=50, help='text modality hyperedges')
 parser.add_argument('--hyper_num_audio', type=int, default=20, help='audio modality hyperedges')
+parser.add_argument('--hyper_num_video', type=int, default=10, help='video modality hyperedges')
 parser.add_argument('--k', type=int, default=3, help='top-k hyperedges per node')
 parser.add_argument('--num_classes', type=int, default=10, help='number of classes')
 parser.add_argument('--num_workers', type=int, default=0, help='data loader workers')
@@ -62,7 +54,7 @@ Exp = Exp_Main
 
 if args.is_training:
     for ii in range(args.itr):
-        setting = f'{args.model_id}_{args.model}_{args.data}_sl{args.seq_len}_pl{args.pred_len}_{ii}'
+        setting = f'{args.model_id}_{args.model}_{args.data}_dm{args.d_model}_nc{args.num_classes}_{ii}'
 
         exp = Exp(args)
         print(f'>>> Start training: {setting} >>>')
@@ -73,9 +65,9 @@ if args.is_training:
 
         torch.cuda.empty_cache()
 else:
-    setting = f'{args.model_id}_{args.model}_{args.data}_sl{args.seq_len}_pl{args.pred_len}_0'
+    setting = f'{args.model_id}_{args.model}_{args.data}_dm{args.d_model}_nc{args.num_classes}_0'
     exp = Exp(args)
     exp.test(setting, test=1)
 
 # Example usage:
-# python run.py --is_training 1 --model_id weather_final --model ASHyper --data weather --root_path ./compressed_data --data_path weather.csv --features M --target OT --seq_len 12 --label_len 6 --pred_len 12 --enc_in 21 --c_out 21 --d_model 16 --n_heads 1 --e_layers 1 --d_layers 1 --d_ff 64 --dropout 0.05 --batch_size 512 --learning_rate 0.1 --train_epochs 1 --itr 1 --num_workers 0
+# python run.py --is_training 1 --model_id multimodal_enhanced --model BimodalClassifier --data multimodal --root_path ./datasets --data_path train.pt --d_model 128 --dropout 0.05 --batch_size 128 --learning_rate 0.001 --train_epochs 5 --hyper_num_text 50 --hyper_num_audio 20 --k 3 --num_classes 7 --itr 1 --num_workers 0
