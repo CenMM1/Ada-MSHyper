@@ -27,3 +27,5 @@ conda run -n py385 python run.py \
   --num_workers 0 \
   --hyper_heads 4 \
   --hyper_multi_head_attention 1
+
+# 安装环境：conda env create -f py385.yml
