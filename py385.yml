@@ -6,10 +6,9 @@ channels:
   - defaults
 dependencies:
   - python=3.8.20
-  - pytorch=1.13.1=py3.8_cuda11.7_cudnn8_0
-  - pytorch-cuda=11.7
-  - torchaudio=0.13.1
-  - torchvision=0.14.1
+  - pytorch=2.1.1
+  - torchaudio=2.1.1
+  - torchvision=0.16.1
   - numpy=1.24.3
   - pandas=2.0.3
   - scipy=1.10.1
@@ -21,11 +20,11 @@ dependencies:
   - pip
   - pip:
       - nni==3.0
-      - torch-geometric==2.3.1
+      - torch-geometric==2.4.0
       - torch-scatter==2.1.2
       - torch-sparse==0.6.18
       - torch-cluster==1.6.3
-      - torch-spline-conv==1.2.2+pt113cu117
+      - torch-spline-conv==1.2.2
       - pyyaml==6.0.2
       - psutil==7.0.0
       - prettytable==3.11.0
