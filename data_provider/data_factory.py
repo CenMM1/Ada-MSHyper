@@ -1,13 +1,8 @@
 from data_provider.data_loader import Dataset_Multimodal_Classification
 from torch.utils.data import DataLoader
 
-data_dict = {
-    'multimodal': Dataset_Multimodal_Classification,
-}
-
-
 def data_provider(args, flag):
-    Data = data_dict[args.data]
+    Data = Dataset_Multimodal_Classification
 
     if flag == 'test':
         shuffle_flag = False
@@ -21,7 +16,6 @@ def data_provider(args, flag):
     # 多模态数据加载
     data_set = Data(
         root_path=args.root_path,
-        data_path=args.data_path,
         flag=flag
     )
 

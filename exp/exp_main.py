@@ -18,10 +18,7 @@ class Exp_Main(Exp_Basic):
         super(Exp_Main, self).__init__(args)
 
     def _build_model(self):
-        if self.args.data == 'multimodal':
-            model = BimodalClassifier(self.args).float()
-        else:
-            raise ValueError("Only multimodal data is supported")
+        model = BimodalClassifier(self.args).float()
         num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         print(f'[Info] Number of parameters: {num_params}')
         return model
@@ -34,10 +31,7 @@ class Exp_Main(Exp_Basic):
         return optim.Adam(self.model.parameters(), lr=self.args.learning_rate)
 
     def _select_criterion(self):
-        if self.args.data == 'multimodal':
-            return nn.CrossEntropyLoss()
-        else:
-            raise ValueError("Only multimodal data is supported")
+        return nn.CrossEntropyLoss()
 
     def vali(self, vali_data, vali_loader, criterion):
         total_loss = []
@@ -77,43 +71,6 @@ class Exp_Main(Exp_Basic):
             epoch_time = time.time()
             train_loss = []
 
-            # 每个epoch开始时记录超图结构
-            # 使用训练数据中的第一个批次来获取超图结构
-            try:
-                first_batch = next(iter(train_loader))
-                for key in first_batch:
-                    if isinstance(first_batch[key], torch.Tensor):
-                        first_batch[key] = first_batch[key].float().to(self.device)
-
-                # 记录超图结构（在模型前向传播中会生成超图）
-                with torch.no_grad():
-                    _ = self.model(first_batch)  # 前向传播会触发超图生成
-
-                # 记录每个模态的超图结构
-                for i, modality in enumerate(['text', 'audio']):
-                    # 从模型中获取最新生成的超图
-                    # 注意：这里假设模型在前向传播后保留了最新的超图结构
-                    # 如果模型没有保留，我们需要从前向传播过程中捕获
-                    try:
-                        # 使用相同的输入来重新生成超图进行记录
-                        text_features = first_batch['text_vector'][:1]  # 取第一个样本
-                        audio_features = first_batch['audio_vector'][:1]
-                        text_mask = first_batch['text_mask'][:1]
-                        audio_mask = first_batch['audio_mask'][:1]
-
-                        features = text_features if modality == 'text' else audio_features
-                        mask = text_mask if modality == 'text' else audio_mask
-
-                        hypergraphs = self.model.hyper_generators[i](features, mask)
-                        hypergraph = hypergraphs[0].to(self.device)
-                        self.record_hypergraph_svd(
-                            hypergraph, modality, stage='epoch_start', epoch=epoch, batch=0,
-                            weight_matrix=self.model.hyper_convs[i].weight
-                        )
-                    except Exception as e:
-                        print(f"Warning: Could not record hypergraph for {modality}: {e}")
-            except Exception as e:
-                print(f"Warning: Could not record hypergraphs at epoch start: {e}")
 
             for batch_data in train_loader:
                 model_optim.zero_grad()
@@ -129,7 +86,7 @@ class Exp_Main(Exp_Basic):
                 loss = criterion(outputs, targets)
                 # 添加超图约束损失
                 if constrain_loss > 0:
-                    loss = loss + 0.1 * constrain_loss
+                    loss = loss + self.args.loss_lambda * constrain_loss
 
                 train_loss.append(loss.item())
 
@@ -191,42 +148,6 @@ class Exp_Main(Exp_Basic):
         best_model_path = os.path.join(path, 'checkpoint.pth')
         self.model.load_state_dict(torch.load(best_model_path))
 
-        # 训练完全结束时记录最终超图结构
-        # 使用测试数据中的第一个批次来获取超图结构
-        try:
-            test_iter = iter(test_loader)
-            first_test_batch = next(test_iter)
-
-            for key in first_test_batch:
-                if isinstance(first_test_batch[key], torch.Tensor):
-                    first_test_batch[key] = first_test_batch[key].float().to(self.device)
-
-            # 记录超图结构（在模型前向传播中会生成超图）
-            with torch.no_grad():
-                _ = self.model(first_test_batch)  # 前向传播会触发超图生成
-
-            # 记录每个模态的超图结构
-            for i, modality in enumerate(['text', 'audio']):
-                try:
-                    # 使用相同的输入来重新生成超图进行记录
-                    text_features = first_test_batch['text_vector'][:1]  # 取第一个样本
-                    audio_features = first_test_batch['audio_vector'][:1]
-                    text_mask = first_test_batch['text_mask'][:1]
-                    audio_mask = first_test_batch['audio_mask'][:1]
-
-                    features = text_features if modality == 'text' else audio_features
-                    mask = text_mask if modality == 'text' else audio_mask
-
-                    hypergraphs = self.model.hyper_generators[i](features, mask)
-                    hypergraph = hypergraphs[0].to(self.device)
-                    self.record_hypergraph_svd(
-                        hypergraph, modality, stage='training_complete', epoch=self.args.train_epochs-1, batch=0,
-                        weight_matrix=self.model.hyper_convs[i].weight
-                    )
-                except Exception as e:
-                    print(f"Warning: Could not record final hypergraph for {modality}: {e}")
-        except Exception as e:
-            print(f"Warning: Could not record final hypergraphs: {e}")
 
         return self.model
 
@@ -299,7 +220,7 @@ class Exp_Main(Exp_Basic):
         weight_info = self.compute_weight_svd_info(weight_matrix)
 
         # 获取模态特定的参数
-        seq_len = 160 if modality == 'text' else 518
+        seq_len = getattr(self.args, f'seq_len_{modality}', 0)
         hyper_num = getattr(self.args, f'hyper_num_{modality}', 50)
 
         with open(csv_file, 'a', newline='') as f:

@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 
 class Dataset_Multimodal_Classification(Dataset):
     def __init__(self, root_path, flag='train', size=None,
-                 features='multimodal', data_path='train.pt',
+                 features='multimodal',
                  target='multimodal', scale=False, timeenc=0, freq='h'):
         # size [seq_len, label_len, pred_len] - 对于分类任务，seq_len表示时间序列长度
         if size == None:
@@ -24,7 +24,6 @@ class Dataset_Multimodal_Classification(Dataset):
         self.freq = freq
 
         self.root_path = root_path
-        self.data_path = data_path
         self.__read_data__()
 
     def __read_data__(self):

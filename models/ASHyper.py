@@ -306,14 +306,7 @@ class MaskedAdaptiveHypergraphGenerator(nn.Module):
         self.modality = modality
 
         # 根据模态确定序列长度
-        if modality == 'text':
-            self.seq_len = 160  # 文本序列长度
-        elif modality == 'audio':
-            self.seq_len = 518  # 音频序列长度
-        elif modality == 'video':
-            self.seq_len = 16   # 视频序列长度
-        else:
-            self.seq_len = configs.seq_len  # 默认
+        self.seq_len = getattr(configs, f'seq_len_{modality}', getattr(configs, 'seq_len', 100))
 
         self.dim = configs.d_model
         self.hyper_num = getattr(configs, f'hyper_num_{modality}', 50)  # 模态特定的超边数
@@ -425,7 +418,11 @@ class BimodalClassifier(nn.Module):
         # 模态配置
         self.modalities = ['text', 'audio', 'video']
         # 各模态原始特征维度（由数据集决定）
-        self.feature_dims = {'text': 1024, 'audio': 1024, 'video': 2048}
+        self.feature_dims = {
+            'text': getattr(configs, 'feature_dim_text', 1024),
+            'audio': getattr(configs, 'feature_dim_audio', 1024),
+            'video': getattr(configs, 'feature_dim_video', 2048)
+        }
 
         # 模态特定的超图生成器
         self.hyper_generators = nn.ModuleList([
