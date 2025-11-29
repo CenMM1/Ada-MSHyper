@@ -133,4 +133,8 @@ feature.*
 CHERMA202307*
 compressed_da*
 figures/*
+preprocess/MOSEI/*
+preprocess/MOSI/*
+preprocess/CHERMA/*
 datasets/*
+
