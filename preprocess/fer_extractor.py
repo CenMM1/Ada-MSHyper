@@ -7,8 +7,20 @@ import os
 from PIL import Image
 from torchvision import transforms
 import mediapipe as mp
+from mediapipe.tasks import python as mp_tasks
+from mediapipe.tasks.python import vision
+from mediapipe import Image as MPImage
 import scipy.ndimage
 import gdown
+import urllib.request
+
+def download_face_model():
+    model_path = './face_landmarker.task'
+    if not os.path.exists(model_path):
+        print("Downloading face landmarker model...")
+        url = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
+        urllib.request.urlretrieve(url, model_path)
+    return model_path
 
 # --- Copied from libreface.Facial_Expression_Recognition.models.resnet18 ---
 class ResNet(nn.Module):
@@ -91,7 +103,7 @@ def image_align(img, face_landmarks, output_size=256,
   shrink = int(np.floor(qsize / output_size * 0.5))
   if shrink > 1:
     rsize = (int(np.rint(float(img.size[0]) / shrink)), int(np.rint(float(img.size[1]) / shrink)))
-    img = img.resize(rsize, Image.ANTIALIAS)
+    img = img.resize(rsize, Image.Resampling.LANCZOS)
     quad /= shrink
     qsize /= shrink
 
@@ -200,9 +212,8 @@ def preprocess_face(image):
     return transform(image)
 
 # MediaPipe face detection and alignment
-mp_face_mesh = mp.solutions.face_mesh
 
-def detect_and_align_face(image, face_mesh, output_size=224, detection_width=640):
+def detect_and_align_face(image, landmarker, output_size=224, detection_width=640):
     """
     Detect face using MediaPipe and align to 224x224.
     Input: numpy array (BGR image), face_mesh instance
@@ -255,27 +266,34 @@ def detect_and_align_face(image, face_mesh, output_size=224, detection_width=640
         if x not in Lips: Lips.append(x)
         if y not in Lips: Lips.append(y)
 
-    results = face_mesh.process(image_rgb)
-    if not results.multi_face_landmarks:
+    mp_image = MPImage(image_format=mp.ImageFormat.SRGB, data=image_rgb)
+    result = landmarker.detect(mp_image)
+    if not result.face_landmarks:
         return None
 
-    face_landmarks = results.multi_face_landmarks[0]
+    face_landmarks = result.face_landmarks[0]
     
-    lm_left_eye_x = [face_landmarks.landmark[i].x for i in Left_eye]
-    lm_left_eye_y = [face_landmarks.landmark[i].y for i in Left_eye]
-    lm_right_eye_x = [face_landmarks.landmark[i].x for i in Right_eye]
-    lm_right_eye_y = [face_landmarks.landmark[i].y for i in Right_eye]
-    lm_lips_x = [face_landmarks.landmark[i].x for i in Lips]
-    lm_lips_y = [face_landmarks.landmark[i].y for i in Lips]
+    lm_left_eye_x = [face_landmarks[i].x for i in Left_eye]
+    lm_left_eye_y = [face_landmarks[i].y for i in Left_eye]
+    lm_right_eye_x = [face_landmarks[i].x for i in Right_eye]
+    lm_right_eye_y = [face_landmarks[i].y for i in Right_eye]
+    lm_lips_x = [face_landmarks[i].x for i in Lips]
+    lm_lips_y = [face_landmarks[i].y for i in Lips]
     lm_x = lm_left_eye_x + lm_right_eye_x + lm_lips_x
     lm_y = lm_left_eye_y + lm_right_eye_y + lm_lips_y
     landmark = np.array([lm_x, lm_y]).T
 
+    # Scale landmarks to image size
+    landmark[:,0] *= image.shape[1]
+    landmark[:,1] *= image.shape[0]
+
     # Use original image for alignment (high quality)
-    # Note: landmarks are normalized [0,1], so they work with original image size automatically
     original_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    aligned_image = image_align(Image.fromarray(original_rgb), landmark, output_size=output_size)
-    return aligned_image
+    try:
+        aligned_image = image_align(Image.fromarray(original_rgb), landmark, output_size=output_size)
+        return aligned_image
+    except ValueError:
+        return None
 
 def extract_video_embeddings(video_path, model, device='cpu', batch_size=64):
     """
@@ -290,36 +308,38 @@ def extract_video_embeddings(video_path, model, device='cpu', batch_size=64):
 
     embeddings = []
     batch_frames = []
-    
-    # Initialize FaceMesh once for the video
-    with mp_face_mesh.FaceMesh(static_image_mode=False, refine_landmarks=True,
-                               max_num_faces=1, min_detection_confidence=0.5) as face_mesh:
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
 
-            # Detect and align directly from frame
-            aligned_face = detect_and_align_face(frame, face_mesh)
-            if aligned_face is None:
-                continue
+    # Initialize FaceLandmarker once for the video
+    model_path = download_face_model()
+    base_options = mp_tasks.BaseOptions(model_asset_path=model_path)
+    options = vision.FaceLandmarkerOptions(base_options=base_options, num_faces=1)
+    landmarker = vision.FaceLandmarker.create_from_options(options)
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
 
-            # Preprocess and accumulate
-            tensor_face = preprocess_face(aligned_face) # [3, 224, 224]
-            batch_frames.append(tensor_face)
+        # Detect and align directly from frame
+        aligned_face = detect_and_align_face(frame, landmarker)
+        if aligned_face is None:
+            continue
 
-            # Process batch if full
-            if len(batch_frames) >= batch_size:
-                batch_tensor = torch.stack(batch_frames).to(device) # [B, 3, 224, 224]
-                batch_emb = model.encode(batch_tensor).cpu().numpy() # [B, 512]
-                embeddings.append(batch_emb)
-                batch_frames = []
+        # Preprocess and accumulate
+        tensor_face = preprocess_face(aligned_face) # [3, 224, 224]
+        batch_frames.append(tensor_face)
 
-        # Process remaining frames
-        if batch_frames:
-            batch_tensor = torch.stack(batch_frames).to(device)
-            batch_emb = model.encode(batch_tensor).cpu().numpy()
+        # Process batch if full
+        if len(batch_frames) >= batch_size:
+            batch_tensor = torch.stack(batch_frames).to(device) # [B, 3, 224, 224]
+            batch_emb = model.encode(batch_tensor).cpu().numpy() # [B, 512]
             embeddings.append(batch_emb)
+            batch_frames = []
+
+    # Process remaining frames
+    if batch_frames:
+        batch_tensor = torch.stack(batch_frames).to(device)
+        batch_emb = model.encode(batch_tensor).cpu().numpy()
+        embeddings.append(batch_emb)
 
     cap.release()
     
