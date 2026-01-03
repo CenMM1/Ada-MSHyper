@@ -1,7 +1,10 @@
 #!/bin/bash
 
+# Cherma https://rmiteduau-my.sharepoint.com/:u:/g/personal/s4119337_student_rmit_edu_au/IQC-30PI91rrQZSFB15E8xI6AYLHDqdd1-WBVdGayS6Wu6c?e=lQ2jd4
+
 # 下载SharePoint页面
-wget -O sp.html "https://rmiteduau-my.sharepoint.com/:x:/g/personal/s4119337_student_rmit_edu_au/IQD5GdJzvbrETLsRxD36PMwkAQyCYhGPmFHucTw-WYpd3Us?e=sAMHM9"
+wget -O sp.html "https://rmiteduau-my.sharepoint.com/:u:/g/personal/s4119337_student_rmit_edu_au/IQC-30PI91rrQZSFB15E8xI6AYLHDqdd1-WBVdGayS6Wu6c?e=lQ2jd4
+"
 
 # 从HTML中提取编码的下载URL
 ENCODED_URL=$(grep -o 'https[^"]*download[^"]*tempauth[^"]*' sp.html)
@@ -10,7 +13,7 @@ ENCODED_URL=$(grep -o 'https[^"]*download[^"]*tempauth[^"]*' sp.html)
 REAL_URL=$(echo "$ENCODED_URL" | sed 's/\\u002f/\//g')
 
 # 下载文件，使用content-disposition获取正确文件名
-wget --content-disposition -O label.csv "$REAL_URL"
+wget --content-disposition -O cherma.tar.gz "$REAL_URL"
 
 echo "下载完成"
 
