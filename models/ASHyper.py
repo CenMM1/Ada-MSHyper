@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+import csv
 
 from torch_geometric.nn import MessagePassing
 from torch.nn import Parameter
@@ -275,7 +276,7 @@ class HypergraphConv(MessagePassing):
                 alpha = torch.stack(alphas, dim=1)
 
                 # 将多头注意力聚合为单一权重（这里取平均，后续可做 ablation 改为求和等）
-                alpha = alpha.mean(dim=-1)  # [E, B]
+                alpha = alpha.sum(dim=-1) / self.heads  # [E, B]
                 alpha = F.dropout(alpha, p=self.dropout, training=self.training)
 
         # 6) 使用注意力和归一化系数做 Node -> Edge -> Node 双向传播
@@ -300,7 +301,7 @@ class HypergraphConv(MessagePassing):
 
 
 class MaskedAdaptiveHypergraphGenerator(nn.Module):
-    """基于掩码的自适应超图生成器"""
+    """基于掩码的自适应超图生成器，支持动态结构学习"""
     def __init__(self, modality, configs):
         super().__init__()
         self.modality = modality
@@ -310,38 +311,61 @@ class MaskedAdaptiveHypergraphGenerator(nn.Module):
 
         self.dim = configs.d_model
         self.hyper_num = getattr(configs, f'hyper_num_{modality}', 50)  # 模态特定的超边数
-        self.alpha = 3
+        self.alpha = 1.0
         self.k = getattr(configs, 'k', 3)
 
-        # 模态特定的固定嵌入层
-        self.node_embed = nn.Embedding(self.seq_len, self.dim)  # 节点嵌入
-        self.hyperedge_embed = nn.Embedding(self.hyper_num, self.dim)  # 超边嵌入
+        # 模态特定阈值，避免超图过密导致CUDA错误
+        self.threshold = {'text': 0.05, 'audio': 0.1, 'video': 0.08}.get(self.modality, 0.1)
+
+        # 是否启用动态超图结构学习
+        self.dynamic = getattr(configs, 'dynamic_hypergraph', True)
+
+        if self.dynamic:
+            # 模态特定的可学习嵌入参数（用于动态结构学习）
+            self.node_embeds = nn.Parameter(torch.randn(self.seq_len, self.dim))  # 可学习节点嵌入
+            self.hyper_embeds = nn.Parameter(torch.randn(self.hyper_num, self.dim))  # 可学习超边嵌入
+        else:
+            # 静态：使用固定嵌入层
+            self.node_embed = nn.Embedding(self.seq_len, self.dim)  # 节点嵌入
+            self.hyperedge_embed = nn.Embedding(self.hyper_num, self.dim)  # 超边嵌入
 
         self.dropout = nn.Dropout(p=0.1)
 
-    def forward(self, features, mask):
-        """生成共享超图结构，补零节点通过掩码影响相似度
+        # 缓存上次的超图（用于减少重计算）
+        self.cached_hypergraph = None
+
+    def forward(self, features, mask, update_hyper=True):
+        """生成动态超图结构，基于可学习嵌入和反馈驱动适应
         features: [batch_size, seq_len, feature_dim]
         mask: [batch_size, seq_len]
+        update_hyper: 是否更新超图结构（减少计算开销）
         注意：实际序列长度 seq_len 可能与配置的 self.seq_len 不一致，这里统一采用
         effective_len = min(self.seq_len, seq_len)，以避免索引越界。
         """
+        if not update_hyper and self.cached_hypergraph is not None:
+            # 使用缓存的超图
+            return [self.cached_hypergraph] * len(features) if isinstance(features, list) else [self.cached_hypergraph] * features.shape[0]
         batch_size, seq_len, feature_dim = features.shape
 
         # 有效长度：不超过真实序列长度，避免后续超图节点索引越界
         effective_len = min(self.seq_len, seq_len)
 
-        # 使用固定嵌入层（仅前 effective_len 个位置参与构图）
-        node_embeddings = self.node_embed(
-            torch.arange(effective_len, device=features.device)
-        )  # [effective_len, dim]
+        if self.dynamic:
+            # 使用可学习嵌入（仅前 effective_len 个位置参与构图）
+            node_embeddings = self.node_embeds[:effective_len]  # [effective_len, dim]
+            hyperedge_embeddings = self.hyper_embeds  # [hyper_num, dim]
+        else:
+            # 使用固定嵌入层
+            node_embeddings = self.node_embed(
+                torch.arange(effective_len, device=features.device)
+            )  # [effective_len, dim]
+            hyperedge_embeddings = self.hyperedge_embed(
+                torch.arange(self.hyper_num, device=features.device)
+            )  # [hyper_num, dim]
 
-        hyperedge_embeddings = self.hyperedge_embed(
-            torch.arange(self.hyper_num, device=features.device)
-        )  # [hyper_num, dim]
-
-        # 计算基础相似度
+        # 计算基础相似度（动态重计算）
         similarity = torch.mm(node_embeddings, hyperedge_embeddings.transpose(0, 1))  # [effective_len, hyper_num]
+        original_similarity = similarity.clone()
 
         # 应用温度系数
         similarity = F.relu(self.alpha * similarity)
@@ -351,22 +375,26 @@ class MaskedAdaptiveHypergraphGenerator(nn.Module):
         mask_penalty = avg_mask[:effective_len]  # [effective_len]
 
         similarity = similarity * mask_penalty.unsqueeze(-1)  # [effective_len, hyper_num]
+        masked_similarity = similarity.clone()
+        mask_penalty_values = mask_penalty.clone()
 
-        # 应用softmax
-        adj = F.softmax(similarity, dim=0)  # [effective_len, hyper_num]
+        # 应用SoftMax得到软关联矩阵（用于梯度传播）
+        soft_adj = F.softmax(similarity, dim=1)  # [effective_len, hyper_num]
+        softmax_similarity = soft_adj.clone()
 
-        # 选择top-k超边
-        mask_adj = torch.zeros_like(adj)
-        s1, t1 = adj.topk(min(self.k, self.hyper_num), 1)
+        # 选择top-k超边（稀疏化）
+        mask_adj = torch.zeros_like(soft_adj)
+        s1, t1 = soft_adj.topk(min(self.k, self.hyper_num), 1)
         mask_adj.scatter_(1, t1, s1.fill_(1))
-        adj = adj * mask_adj
+        adj = soft_adj * mask_adj
 
-        # 二值化
+        # 二值化（用于消息传递）
         adj = torch.where(
-            adj > 0.5,
+            adj > self.threshold,
             torch.tensor(1.0, device=features.device),
             torch.tensor(0.0, device=features.device),
         )
+        binary_similarity = adj.clone()
 
         # 只保留有连接的超边
         valid_hyperedges = (adj != 0).any(dim=0)
@@ -402,17 +430,21 @@ class MaskedAdaptiveHypergraphGenerator(nn.Module):
         hypergraph = np.vstack((node_list, hyperedge_list))
         hypergraph = torch.tensor(hypergraph, dtype=torch.long)
 
+
+        # 缓存超图
+        self.cached_hypergraph = hypergraph
+
         # 返回相同的超图给所有批次样本
         return [hypergraph] * batch_size
 
 
-class BimodalClassifier(nn.Module):
+class MultimodalClassifier(nn.Module):
     """
     多模态分类器：文本 + 音频 + 视频
     将ASHyper的时间序列预测架构改造为多模态分类
     """
     def __init__(self, configs):
-        super(BimodalClassifier, self).__init__()
+        super(MultimodalClassifier, self).__init__()
         self.configs = configs
 
         # 模态配置
@@ -450,8 +482,15 @@ class BimodalClassifier(nn.Module):
         # 模态间交互机制 (超边注意力，使用d_model维度)
         self.inter_modal_attention = InterModalAttention(configs.d_model)
 
-        # 按照原ASHyper的融合方式 - 只保留必要的变换 (动态total_edges)
-        self.classifier = nn.Linear(configs.d_model, getattr(configs, 'num_classes', 10))
+        # ECR参数
+        self.kappa = getattr(configs, 'kappa', 0.1)  # ECR权重
+
+        # 动态超图更新频率（每N步更新一次超图结构，减少计算开销）
+        self.hyper_update_freq = getattr(configs, 'hyper_update_freq', 1)  # 默认每步更新
+        self.step_counter = 0
+
+        # 按照HyperGAMER论文的融合方式 - 6 * d_model (3模态 × 2表示)
+        self.classifier = nn.Linear(6 * configs.d_model, getattr(configs, 'num_classes', 10))
 
     def forward(self, batch_data, x_mark_enc=None):
         """
@@ -461,7 +500,7 @@ class BimodalClassifier(nn.Module):
         """
         # 检查输入类型
         if not isinstance(batch_data, dict):
-            raise ValueError("BimodalClassifier only supports multimodal input as dict")
+            raise ValueError("MultimodalClassifier only supports multimodal input as dict")
 
         # 提取各模态特征和掩码
         text_features = batch_data['text_vector']     # [batch_size, 160, 1024]
@@ -477,13 +516,17 @@ class BimodalClassifier(nn.Module):
         # 使用标量 Tensor 以便与约束损失累加，并保持梯度
         total_constrain_loss = torch.tensor(0.0, device=text_features.device)
 
+        # 检查是否需要更新超图结构
+        self.step_counter += 1
+        update_hyper = (self.step_counter % self.hyper_update_freq == 0) or (self.step_counter == 1)
+
         for i, (modality, features, mask) in enumerate([
             ('text', text_features, text_mask),
             ('audio', audio_features, audio_mask),
             ('video', video_features, video_mask),
         ]):
-            # 生成模态内超图
-            hypergraphs = self.hyper_generators[i](features, mask)
+            # 生成模态内超图（动态模式下按频率更新）
+            hypergraphs = self.hyper_generators[i](features, mask, update_hyper=update_hyper)
             hypergraph = hypergraphs[0].to(features.device)
             modal_hypergraphs.append(hypergraph)
 
@@ -502,12 +545,6 @@ class BimodalClassifier(nn.Module):
             )
             modal_hyper_reprs.append(hyper_repr)
 
-            # 记录超图结构和权重矩阵信息（可选，用于调试）
-            # 注释掉推理时的记录，避免干扰训练记录
-            # self.hyper_generators[i].record_hypergraph(
-            #     hypergraph, stage='inference', epoch=0, batch=0,
-            #     weight_matrix=self.hyper_convs[i].weight
-            # )
 
         # 模态间交互 (跨模态超边注意力) - 动态total_edges，无填充
         if modal_hyper_reprs:
@@ -551,36 +588,99 @@ class BimodalClassifier(nn.Module):
 
             modal_outputs.append(updated_node_features)
 
-        # 模态内输出拼接 (类似尺度输出拼接) - 现在已经是d_model维度
-        if modal_outputs:
-            # [batch_size, (L_text + L_audio + L_video), d_model]
-            result_tensor = torch.cat(modal_outputs, dim=1)
-        else:
-            total_len = text_features.shape[1] + audio_features.shape[1] + video_features.shape[1]
-            result_tensor = torch.zeros(
-                text_features.shape[0],
-                total_len,
-                self.configs.d_model,
-                device=text_features.device,
-            )
-
-        # 最终融合 (严格按照原ASHyper的方式)
-        # x_out = 模态内输出, x = 原始输入, x_out_inter = 模态间输出
-
-        # 模态内输出池化
-        x_out = result_tensor.mean(dim=1)  # [batch_size, d_model] - 类似原ASHyper的尺度输出
-
-        # 模态间输出 - 动态total_edges
-        x_out_inter = inter_modal_attention.mean(dim=1)  # [batch_size, d_model] - 类似原ASHyper的尺度间输出
-
-        # 相加融合 (严格按照原ASHyper: x_out + x + x_out_inter)
-        # 现在维度都对齐为d_model
-        fused_features = x_out + x_out_inter  # [batch_size, d_model]
-
+        # 按照HyperGAMER论文的Representation Fusion
+        modal_summaries = []
+        for i, (hyper_repr, node_output) in enumerate(zip(enhanced_hyper_reprs, modal_outputs)):
+            # 节点池化
+            z_n = node_output.mean(dim=1)  # [batch_size, d_model]
+            # 超边池化
+            z_e = hyper_repr.mean(dim=1)   # [batch_size, d_model]
+            # 模态表示拼接
+            Z_m = torch.cat([z_n, z_e], dim=1)  # [batch_size, 2 * d_model]
+            modal_summaries.append(Z_m)
+        # 多模态融合
+        Z_fusion = torch.cat(modal_summaries, dim=1)  # [batch_size, 6 * d_model]
         # 分类输出
-        logits = self.classifier(fused_features)  # [batch_size, num_classes]
+        logits = self.classifier(Z_fusion)  # [batch_size, num_classes]
+
+        # 计算情感一致性正则化 (ECR)
+        ecr_loss = self.compute_ecr_loss(modal_hypergraphs, modal_hyper_reprs, modal_outputs)
 
         # 对多模态约束损失做简单平均，避免因模态数目放大尺度
         total_constrain_loss = total_constrain_loss / len(self.modalities)
 
-        return logits, total_constrain_loss
+        # 总损失 = constrain_loss + kappa * ecr_loss
+        total_loss = total_constrain_loss + self.kappa * ecr_loss
+
+        return logits, total_loss
+
+    def compute_ecr_loss(self, modal_hypergraphs, modal_hyper_reprs, modal_node_outputs):
+        """
+        计算情感一致性正则化 (ECR) - 向量化优化版本
+        modal_hypergraphs: 各模态超图结构
+        modal_hyper_reprs: 各模态超边表示 [batch_size, num_edges_m, d_model]
+        modal_node_outputs: 各模态节点输出 [batch_size, seq_len_m, d_model]
+        """
+        total_ecd = 0.0
+        total_epc = 0.0
+        num_modalities = len(modal_hypergraphs)
+
+        for m in range(num_modalities):
+            hypergraph = modal_hypergraphs[m]  # [2, num_conn]
+            hyper_repr = modal_hyper_reprs[m]  # [B, M, D]
+            node_repr = modal_node_outputs[m]  # [B, N, D]
+
+            batch_size, num_nodes, _ = node_repr.shape
+            _, num_edges, _ = hyper_repr.shape
+
+            # 构建二值关联矩阵 H [B, N, M] - 扩展到batch维度
+            H = torch.zeros(batch_size, num_nodes, num_edges, device=hyper_repr.device)
+            node_idx = hypergraph[0]
+            edge_idx = hypergraph[1]
+            H[:, node_idx, edge_idx] = 1.0  # [B, N, M]
+
+            # ECD: 节点-超边距离 - 向量化
+            # 计算所有节点到所有超边的距离 [B, N, M]
+            dist_node_hyper = torch.cdist(node_repr, hyper_repr, p=2)  # [B, N, M]
+
+            # 只计算关联的距离，mask掉非关联
+            masked_dist = dist_node_hyper * H  # [B, N, M]
+            # 对每个节点，平均其关联超边的距离
+            node_degrees = H.sum(dim=2, keepdim=True)  # [B, N, 1]
+            node_degrees = torch.clamp(node_degrees, min=1e-8)  # 避免除零
+            ecd_per_node = (masked_dist.sum(dim=2) / node_degrees.squeeze(2))  # [B, N]
+            ecd_m = ecd_per_node.mean()  # 标量
+            total_ecd += ecd_m
+
+            # EPC: 超边间关系 - 向量化
+            if num_edges >= 2:
+                # 计算余弦相似度 [B, M, M]
+                norm_hyper = F.normalize(hyper_repr, p=2, dim=2)  # [B, M, D]
+                cos_sim = torch.bmm(norm_hyper, norm_hyper.transpose(1, 2))  # [B, M, M]
+
+                # 计算欧几里得距离 [B, M, M]
+                dist_hyper = torch.cdist(hyper_repr, hyper_repr, p=2)  # [B, M, M]
+
+                # 论文中的margin η，假设为4.2
+                eta = 4.2
+
+                # 计算EPC项：α * dist + (1-α) * clamp(η - dist, 0)
+                epc_matrix = cos_sim * dist_hyper + (1 - cos_sim) * torch.clamp(eta - dist_hyper, min=0.0)  # [B, M, M]
+
+                # 排除对角线（i==j）
+                mask = torch.eye(num_edges, device=hyper_repr.device).unsqueeze(0).bool()  # [1, M, M]
+                epc_matrix = epc_matrix.masked_fill(mask, 0.0)
+
+                # 平均
+                epc_m = epc_matrix.sum() / (batch_size * num_edges * (num_edges - 1))
+                total_epc += epc_m
+
+        # 平均ECD和EPC，λ=0.5
+        lambda_ecd = 0.5
+        lambda_epc = 0.5
+        ecr_loss = lambda_ecd * (total_ecd / num_modalities) + lambda_epc * (total_epc / num_modalities)
+
+        return ecr_loss
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.configs.d_model}, {getattr(self.configs, 'num_classes', 10)})"

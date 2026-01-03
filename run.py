@@ -3,10 +3,11 @@ import torch
 from exp.exp_main import Exp_Main
 
 # Set random seed
-torch.manual_seed(2024)
+import random
+torch.manual_seed(random.randint(0, 10000))
 
 # Argument parser
-parser = argparse.ArgumentParser(description='BimodalClassifier Multimodal Classification')
+parser = argparse.ArgumentParser(description='MultimodalClassifier Multimodal Classification')
 
 # =========================
 #      Basic Config
@@ -25,6 +26,8 @@ parser.add_argument('--num_classes', type=int, default=10, help='number of class
 parser.add_argument('--d_model', type=int, default=128, help='model dimension')
 parser.add_argument('--dropout', type=float, default=0.1, help='dropout')
 parser.add_argument('--k', type=int, default=3, help='top-k hyperedges per node')
+parser.add_argument('--dynamic_hypergraph', type=int, default=1, help='1: dynamic hypergraph structure, 0: static')
+parser.add_argument('--hyper_update_freq', type=int, default=5, help='update hypergraph every N steps to reduce computation')
 
 # Hypergraph Attention
 parser.add_argument('--hyper_heads', type=int, default=1,
@@ -72,7 +75,7 @@ Exp = Exp_Main
 
 if args.is_training:
     for ii in range(args.itr):
-        setting = f'BimodalClassifier_multimodal_dm{args.d_model}_nc{args.num_classes}_{ii}'
+        setting = f'MultimodalClassifier_multimodal_dm{args.d_model}_nc{args.num_classes}_{ii}'
 
         exp = Exp(args)
         print(f'>>> Start training: {setting} >>>')
@@ -83,26 +86,64 @@ if args.is_training:
 
         torch.cuda.empty_cache()
 else:
-    setting = f'BimodalClassifier_multimodal_dm{args.d_model}_nc{args.num_classes}_0'
+    setting = f'MultimodalClassifier_multimodal_dm{args.d_model}_nc{args.num_classes}_0'
     exp = Exp(args)
     exp.test(setting, test=1)
 
 # Example usage:
+# /opt/miniforge3/bin/conda run -n py385
 # python run.py \
 #   --is_training 1 \
 #   --root_path ./datasets \
+#   --num_workers 8 \
+#   --num_classes 7 \
 #   --d_model 128 \
 #   --dropout 0.1 \
-#   --batch_size 32 \
-#   --learning_rate 0.0001 \
-#   --train_epochs 20 \
-#   --patience 5 \
+#   --k 3 \
+#   --dynamic_hypergraph 1 \
+#   --hyper_update_freq 5 \
+#   --hyper_heads 1 \
+#   --hyper_multi_head_attention 0 \
 #   --hyper_num_text 50 \
 #   --hyper_num_audio 20 \
-#   --k 3 \
-#   --num_classes 3 \
+#   --hyper_num_video 10 \
 #   --seq_len_text 160 \
 #   --seq_len_audio 518 \
+#   --seq_len_video 16 \
 #   --feature_dim_text 1024 \
 #   --feature_dim_audio 1024 \
+#   --feature_dim_video 2048 \
+#   --batch_size 100 \
+#   --learning_rate 0.0001 \
+#   --train_epochs 5 \
+#   --patience 5 \
+#   --itr 1 \
 #   --loss_lambda 0.1
+
+
+# python run.py \
+#   --is_training 1 \
+#   --root_path ./datasets \
+#   --num_workers 8 \
+#   --num_classes 7 \
+#   --d_model 128 \
+#   --dropout 0.1 \
+#   --k 3 \
+#   --hyper_heads 4 \
+#   --hyper_multi_head_attention 1 \
+#   --hyper_num_text 50 \
+#   --hyper_num_audio 20 \
+#   --hyper_num_video 10 \
+#   --seq_len_text 160 \
+#   --seq_len_audio 518 \
+#   --seq_len_video 16 \
+#   --feature_dim_text 1024 \
+#   --feature_dim_audio 1024 \
+#   --feature_dim_video 2048 \
+#   --batch_size 100 \
+#   --learning_rate 0.0001 \
+#   --train_epochs 5 \
+#   --patience 5 \
+#   --itr 1 \
+#   --loss_lambda 0.1
+

@@ -1,6 +1,6 @@
 from data_provider.data_factory import data_provider
 from exp.exp_basic import Exp_Basic
-from models.ASHyper import BimodalClassifier
+from models.ASHyper import MultimodalClassifier
 from utils.tools import EarlyStopping, adjust_learning_rate
 from utils.metrics import metric
 
@@ -18,13 +18,15 @@ class Exp_Main(Exp_Basic):
         super(Exp_Main, self).__init__(args)
 
     def _build_model(self):
-        model = BimodalClassifier(self.args).float()
+        model = MultimodalClassifier(self.args).float()
         num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         print(f'[Info] Number of parameters: {num_params}')
         return model
 
     def _get_data(self, flag):
+        print(f'[Info] Loading {flag} data...')
         data_set, data_loader = data_provider(self.args, flag)
+        print(f'[Info] {flag} data loaded: {len(data_set)} samples')
         return data_set, data_loader
 
     def _select_optimizer(self):
@@ -72,7 +74,9 @@ class Exp_Main(Exp_Basic):
             train_loss = []
 
 
-            for batch_data in train_loader:
+            for i, batch_data in enumerate(train_loader):
+                if i % 10 == 0:
+                    print(f'[Info] Processing batch {i}/{len(train_loader)}')
                 model_optim.zero_grad()
                 # 多模态数据是字典格式
                 for key in batch_data:
@@ -97,7 +101,7 @@ class Exp_Main(Exp_Basic):
             vali_loss = self.vali(vali_data, vali_loader, criterion)
             test_loss = self.vali(test_data, test_loader, criterion)
 
-            # 每个epoch结束时记录超图结构
+            # 每个epoch结束时记录超图连接数
             # 使用训练数据中的最后一个批次来获取超图结构
             try:
                 # 获取训练数据加载器的迭代器
@@ -115,24 +119,24 @@ class Exp_Main(Exp_Basic):
                     with torch.no_grad():
                         _ = self.model(last_batch)  # 前向传播会触发超图生成
 
-                    # 记录每个模态的超图结构
-                    for i, modality in enumerate(['text', 'audio']):
+                    # 记录每个模态的超图连接数
+                    for i, modality in enumerate(['text', 'audio', 'video']):
                         try:
                             # 使用相同的输入来重新生成超图进行记录
                             text_features = last_batch['text_vector'][:1]  # 取第一个样本
                             audio_features = last_batch['audio_vector'][:1]
+                            video_features = last_batch['video_vector'][:1]
                             text_mask = last_batch['text_mask'][:1]
                             audio_mask = last_batch['audio_mask'][:1]
+                            video_mask = last_batch['video_mask'][:1]
 
-                            features = text_features if modality == 'text' else audio_features
-                            mask = text_mask if modality == 'text' else audio_mask
+                            features = {'text': text_features, 'audio': audio_features, 'video': video_features}[modality]
+                            mask = {'text': text_mask, 'audio': audio_mask, 'video': video_mask}[modality]
 
                             hypergraphs = self.model.hyper_generators[i](features, mask)
                             hypergraph = hypergraphs[0].to(self.device)
-                            self.record_hypergraph_svd(
-                                hypergraph, modality, stage='epoch_end', epoch=epoch, batch=0,
-                                weight_matrix=self.model.hyper_convs[i].weight
-                            )
+                            num_connections = len(hypergraph[0])
+                            self.record_hypergraph_connections(epoch, modality, num_connections)
                         except Exception as e:
                             print(f"Warning: Could not record hypergraph for {modality}: {e}")
             except Exception as e:
@@ -155,7 +159,7 @@ class Exp_Main(Exp_Basic):
         test_data, test_loader = self._get_data(flag='test')
 
         if test:
-            path = os.path.join(self.args.checkpoints, setting)
+            path = os.path.join('./checkpoints', setting)
             best_model_path = os.path.join(path, 'checkpoint.pth')
             self.model.load_state_dict(torch.load(best_model_path))
 
@@ -194,111 +198,39 @@ class Exp_Main(Exp_Basic):
 
             # 打印分类报告
             print('\nClassification Report:')
-            print(classification_report(all_labels, all_preds, digits=4))
+            report = classification_report(all_labels, all_preds, digits=4)
+            print(report)
 
             # 打印混淆矩阵
             print('\nConfusion Matrix:')
             cm = confusion_matrix(all_labels, all_preds)
             print(cm)
 
+            # 保存结果到文件
+            with open('test_results.txt', 'a') as f:
+                f.write(f'Setting: {setting}\n')
+                f.write(f'Accuracy: {accuracy:.4f}\n')
+                f.write(f'F1 Score (Macro): {f1_macro:.4f}\n')
+                f.write(f'F1 Score (Weighted): {f1_weighted:.4f}\n')
+                f.write('\nClassification Report:\n')
+                f.write(report)
+                f.write('\nConfusion Matrix:\n')
+                f.write(str(cm))
+                f.write('\n' + '='*50 + '\n')
+
             return accuracy
 
-    def record_hypergraph_svd(self, hypergraph, modality, stage='unknown', epoch=0, batch=0, weight_matrix=None):
-        """记录超图结构和权重矩阵SVD分解到CSV"""
-        csv_file = f'hypergraph_{modality}.csv'
+    def record_hypergraph_connections(self, epoch, modality, num_connections):
+        """记录超图连接数到CSV"""
+        csv_file = 'hypergraph_connections.csv'
 
         # 初始化CSV文件（如果不存在）
         if not os.path.exists(csv_file):
             with open(csv_file, 'w', newline='') as f:
                 writer = csv.writer(f)
-                writer.writerow(['stage', 'epoch', 'batch', 'modality', 'seq_len', 'hyper_num', 'num_connections', 'node_list', 'hyperedge_list', 'weight_singular_values', 'weight_rank', 'weight_condition_number'])
-
-        node_list = hypergraph[0].cpu().numpy().tolist() if hasattr(hypergraph, 'cpu') else hypergraph[0].tolist()
-        hyperedge_list = hypergraph[1].cpu().numpy().tolist() if hasattr(hypergraph, 'cpu') else hypergraph[1].tolist()
-
-        # 计算权重矩阵的SVD分解信息
-        weight_info = self.compute_weight_svd_info(weight_matrix)
-
-        # 获取模态特定的参数
-        seq_len = getattr(self.args, f'seq_len_{modality}', 0)
-        hyper_num = getattr(self.args, f'hyper_num_{modality}', 50)
+                writer.writerow(['epoch', 'modality', 'num_connections'])
 
         with open(csv_file, 'a', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow([
-                stage, epoch, batch, modality, seq_len, hyper_num,
-                len(node_list), str(node_list), str(hyperedge_list),
-                weight_info['singular_values'], weight_info['rank'], weight_info['condition_number']
-            ])
+            writer.writerow([epoch, modality, num_connections])
 
-    def compute_weight_svd_info(self, weight_matrix=None):
-        """计算权重矩阵的SVD分解信息"""
-        if weight_matrix is None:
-            # 如果没有传入权重矩阵，返回默认值
-            return {
-                'singular_values': 'N/A',
-                'rank': 'N/A',
-                'condition_number': 'N/A'
-            }
-
-        try:
-            # 确保权重矩阵在CPU上并分离梯度
-            weight = weight_matrix.detach().cpu().numpy()
-
-            # 检查权重矩阵是否有效
-            if np.any(np.isnan(weight)):
-                return {
-                    'singular_values': 'NaN in weights',
-                    'rank': 'NaN',
-                    'condition_number': 'NaN'
-                }
-
-            if np.any(np.isinf(weight)):
-                return {
-                    'singular_values': 'Inf in weights',
-                    'rank': 'Inf',
-                    'condition_number': 'Inf'
-                }
-
-            # 确保是二维矩阵
-            if weight.ndim != 2:
-                return {
-                    'singular_values': f'Invalid shape: {weight.shape}',
-                    'rank': 'Invalid',
-                    'condition_number': 'Invalid'
-                }
-
-            # 计算SVD
-            U, s, Vt = np.linalg.svd(weight, full_matrices=False)
-
-            # 检查SVD结果
-            if np.any(np.isnan(s)) or np.any(np.isinf(s)):
-                return {
-                    'singular_values': 'NaN/Inf in singular values',
-                    'rank': 'NaN/Inf',
-                    'condition_number': 'NaN/Inf'
-                }
-
-            # 取前10个奇异值
-            top_singular_values = s[:min(10, len(s))].tolist()
-
-            # 计算有效秩
-            effective_rank = int(np.sum(s > 1e-6))
-
-            # 计算条件数
-            if len(s) > 0 and s[-1] > 1e-12:
-                condition_number = float(s[0] / s[-1])
-            else:
-                condition_number = float('inf')
-
-            return {
-                'singular_values': str(top_singular_values),
-                'rank': effective_rank,
-                'condition_number': condition_number
-            }
-        except Exception as e:
-            return {
-                'singular_values': f'Error: {str(e)}',
-                'rank': 'Error',
-                'condition_number': 'Error'
-            }
