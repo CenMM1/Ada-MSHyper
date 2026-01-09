@@ -137,5 +137,10 @@ preprocess/mosei/*
 preprocess/mosi/*
 preprocess/cherma/*
 datasets/*
+preprocess/dataset/*
+preprocess/processed_data/*
+test_results.txt
+
+
 
 

@@ -33,6 +33,57 @@ class InterModalAttention(nn.Module):
         return attended_values
 
 
+class CrossModalHyperedgeInteraction(nn.Module):
+    """论文式跨模态超边交互：按目标模态 m 做 cross-attn（m←n）并带残差项。
+
+    对每个目标模态 m：
+      A_{m<-n} = softmax( (E_m W_Q)(E_n W_K)^T / sqrt(D) )
+      \tilde E_m = sigma( E_m W_O + sum_{n!=m} A_{m<-n} (E_n W_V) )
+
+    输入/输出均为 list[Tensor]，每个 Tensor 形状 [B, K_m, D]。
+    """
+
+    def __init__(self, d_model: int, dropout: float = 0.1):
+        super().__init__()
+        self.d_model = d_model
+        self.W_Q = nn.Linear(d_model, d_model)
+        self.W_K = nn.Linear(d_model, d_model)
+        self.W_V = nn.Linear(d_model, d_model)
+        self.W_O = nn.Linear(d_model, d_model)
+        self.dropout = nn.Dropout(p=dropout)
+
+    def forward(self, modal_hyperedges):
+        """modal_hyperedges: list of [B, K_m, D]."""
+        if not isinstance(modal_hyperedges, (list, tuple)):
+            raise ValueError("CrossModalHyperedgeInteraction expects a list/tuple of modality hyperedge tensors")
+        if len(modal_hyperedges) == 0:
+            return []
+
+        outs = []
+        scale = math.sqrt(self.d_model)
+        for m, E_m in enumerate(modal_hyperedges):
+            # Q from target modality
+            Q = self.W_Q(E_m)  # [B, K_m, D]
+            msg_sum = 0.0
+            for n, E_n in enumerate(modal_hyperedges):
+                if n == m:
+                    continue
+                K = self.W_K(E_n)  # [B, K_n, D]
+                V = self.W_V(E_n)  # [B, K_n, D]
+                # [B, K_m, K_n]
+                att = torch.matmul(Q, K.transpose(1, 2)) / scale
+                att = F.softmax(att, dim=-1)
+                att = self.dropout(att)
+                # [B, K_m, D]
+                msg_sum = msg_sum + torch.matmul(att, V)
+
+            out = self.W_O(E_m) + msg_sum
+            out = F.relu(out)
+            outs.append(out)
+
+        return outs
+
+
 class HypergraphConv(MessagePassing):
     """超图卷积层，支持节点到超边和超边到节点的双向传播"""
     def __init__(self,
@@ -169,7 +220,10 @@ class HypergraphConv(MessagePassing):
         edge_index = hyperedge_index[1]  # [E]
         num_edges = edge_index.max().item() + 1
 
+        # D_N: node degrees. 论文的 Edge->Node 归一化使用 D_N^{-1}
         D = degree(node_index, num_nodes=num_nodes, dtype=x.dtype)  # [N]
+        D_inv = 1.0 / D
+        D_inv[D_inv == float("inf")] = 0
         edge_deg = degree(edge_index, num_nodes=num_edges, dtype=x.dtype)  # [M]
         B_norm = 1.0 / edge_deg
         B_norm[B_norm == float("inf")] = 0
@@ -290,7 +344,7 @@ class HypergraphConv(MessagePassing):
         x_updated = self.edge2node(
             hyperedge_index=hyperedge_index,
             x_edge=x_edge,
-            norm_edge=D,           # 节点侧的归一化
+            norm_edge=D_inv,        # 节点侧的归一化（D_N^{-1}）
             alpha=alpha,
         )
 
@@ -315,7 +369,7 @@ class MaskedAdaptiveHypergraphGenerator(nn.Module):
         self.k = getattr(configs, 'k', 3)
 
         # 模态特定阈值，避免超图过密导致CUDA错误
-        self.threshold = {'text': 0.05, 'audio': 0.1, 'video': 0.08}.get(self.modality, 0.1)
+        self.threshold = {'text': 0.001, 'audio': 0.1, 'video': 0.001}.get(self.modality, 0.1)
 
         # 是否启用动态超图结构学习
         self.dynamic = getattr(configs, 'dynamic_hypergraph', True)
@@ -479,8 +533,11 @@ class MultimodalClassifier(nn.Module):
             for modality in self.modalities
         ])
 
-        # 模态间交互机制 (超边注意力，使用d_model维度)
-        self.inter_modal_attention = InterModalAttention(configs.d_model)
+        # 模态间交互机制（论文式：按模态 m 做 cross-attn：m<-n + 残差）
+        self.inter_modal_attention = CrossModalHyperedgeInteraction(
+            configs.d_model,
+            dropout=getattr(configs, 'dropout', 0.1),
+        )
 
         # ECR参数
         self.kappa = getattr(configs, 'kappa', 0.1)  # ECR权重
@@ -509,6 +566,8 @@ class MultimodalClassifier(nn.Module):
         text_mask = batch_data['text_mask']           # [batch_size, 160]
         audio_mask = batch_data['audio_mask']         # [batch_size, 518]
         video_mask = batch_data['video_mask']         # [batch_size, 16]
+
+        batch_size = text_features.size(0)
 
         # 模态内处理 - 第一阶段：Node -> Edge (提取超边特征)
         modal_hyper_reprs = []  # 各模态的超边特征
@@ -546,24 +605,14 @@ class MultimodalClassifier(nn.Module):
             modal_hyper_reprs.append(hyper_repr)
 
 
-        # 模态间交互 (跨模态超边注意力) - 动态total_edges，无填充
+        # 模态间交互（论文式）：逐模态 cross-attn（m<-n）+ 残差，无需拼接与切分
         if modal_hyper_reprs:
-            inter_modal_features = torch.cat(modal_hyper_reprs, dim=1)  # [batch_size, total_edges, d_model]
-            inter_modal_attention = self.inter_modal_attention(inter_modal_features)  # [batch_size, total_edges, d_model]
+            enhanced_hyper_reprs = self.inter_modal_attention(modal_hyper_reprs)
         else:
-            inter_modal_attention = torch.zeros(batch_size, 1, self.configs.d_model, device=features.device)
-
-        # 切分回各模态的增强超边特征 - 基于动态total_edges
-        if modal_hyper_reprs:
-            edge_counts = [repr.size(1) for repr in modal_hyper_reprs]
-            enhanced_hyper_reprs = []
-            start_idx = 0
-            for count in edge_counts:
-                enhanced_repr = inter_modal_attention[:, start_idx:start_idx + count, :]
-                enhanced_hyper_reprs.append(enhanced_repr)
-                start_idx += count
-        else:
-            enhanced_hyper_reprs = [torch.zeros(batch_size, 1, self.configs.d_model, device=features.device) for _ in modal_hypergraphs]
+            enhanced_hyper_reprs = [
+                torch.zeros(batch_size, 1, self.configs.d_model, device=text_features.device)
+                for _ in modal_hypergraphs
+            ]
 
         # 模态内处理 - 第二阶段：Edge -> Node (用增强超边更新节点)
         modal_outputs = []
@@ -604,15 +653,21 @@ class MultimodalClassifier(nn.Module):
         logits = self.classifier(Z_fusion)  # [batch_size, num_classes]
 
         # 计算情感一致性正则化 (ECR)
-        ecr_loss = self.compute_ecr_loss(modal_hypergraphs, modal_hyper_reprs, modal_outputs)
+        # 论文：ECR 作用在跨模态交互后的超边表示 \tilde{E}_m 上
+        ecr_loss = self.compute_ecr_loss(modal_hypergraphs, enhanced_hyper_reprs, modal_outputs)
 
-        # 对多模态约束损失做简单平均，避免因模态数目放大尺度
-        total_constrain_loss = total_constrain_loss / len(self.modalities)
+        # =========================
+        # 论文目标：L_total = L_ER + κ * L_ECR
+        # 这里 forward 不包含监督标签，因此不在模型内部计算 L_ER。
+        # 训练脚本应当：loss = CE(logits, y) + κ * L_ECR
+        # =========================
+        reg_loss = self.kappa * ecr_loss
 
-        # 总损失 = constrain_loss + kappa * ecr_loss
-        total_loss = total_constrain_loss + self.kappa * ecr_loss
+        # 保留 total_constrain_loss 的计算以兼容历史实验，但不再作为论文目标的一部分输出。
+        # 若仍希望使用该额外正则，可在外部自行加到 loss 中。
+        _ = total_constrain_loss / len(self.modalities)
 
-        return logits, total_loss
+        return logits, reg_loss
 
     def compute_ecr_loss(self, modal_hypergraphs, modal_hyper_reprs, modal_node_outputs):
         """

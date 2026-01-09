@@ -16,6 +16,8 @@ from sklearn.metrics import classification_report, confusion_matrix, f1_score
 class Exp_Main(Exp_Basic):
     def __init__(self, args):
         super(Exp_Main, self).__init__(args)
+        # 启用cuDNN优化，提升GPU利用率
+        torch.backends.cudnn.benchmark = True
 
     def _build_model(self):
         model = MultimodalClassifier(self.args).float()
@@ -45,11 +47,12 @@ class Exp_Main(Exp_Basic):
                     if isinstance(batch_data[key], torch.Tensor):
                         batch_data[key] = batch_data[key].float().to(self.device)
 
-                outputs, _ = self.model(batch_data)
+                outputs, reg_loss = self.model(batch_data)
                 # 使用多模态标签作为目标
                 targets = batch_data['label_multimodal'].long()
 
-                loss = criterion(outputs, targets)
+                # 论文目标：L_total = L_ER + κ * L_ECR
+                loss = criterion(outputs, targets) + reg_loss
                 total_loss.append(loss)
 
         total_loss = torch.stack(total_loss).mean()
@@ -83,14 +86,12 @@ class Exp_Main(Exp_Basic):
                     if isinstance(batch_data[key], torch.Tensor):
                         batch_data[key] = batch_data[key].float().to(self.device)
 
-                outputs, constrain_loss = self.model(batch_data)
+                outputs, reg_loss = self.model(batch_data)
                 # 使用多模态标签作为目标
                 targets = batch_data['label_multimodal'].long()
 
-                loss = criterion(outputs, targets)
-                # 添加超图约束损失
-                if constrain_loss > 0:
-                    loss = loss + self.args.loss_lambda * constrain_loss
+                # 论文目标：L_total = L_ER + κ * L_ECR
+                loss = criterion(outputs, targets) + reg_loss
 
                 train_loss.append(loss.item())
 
@@ -233,4 +234,3 @@ class Exp_Main(Exp_Basic):
         with open(csv_file, 'a', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([epoch, modality, num_connections])
-
