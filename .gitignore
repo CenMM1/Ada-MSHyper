@@ -140,6 +140,7 @@ datasets/*
 preprocess/dataset/*
 preprocess/processed_data/*
 test_results.txt
+preprocess/mos*
 
 
 

@@ -30,7 +30,6 @@ conda run -n py385 python run.py \
 
 # 安装环境：conda env create -f py385.yml
 
-wget -O sp.html "<分享链接>"
-grep -o 'https[^"]*download[^"]*tempauth[^"]*' sp.html
-echo "URL_ESCAPED" | sed 's/\\u002f/\//g'
-wget --content-disposition -O <文件名> "<真实链接>"
+git config --global user.email "c13631521801@gmail.com"
+git config --global user.name "CenMM1"
+

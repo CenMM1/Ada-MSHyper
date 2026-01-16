@@ -1,42 +1,87 @@
 """
-Insert vision features into existing MOSI-style pkl dataset.
+Build a compact MOSI pkl with utterance-level vision features.
+Only keep model-required fields to reduce file size.
 """
 
+import os
 import pickle
 import numpy as np
 
-PKL_PATH = "mosi_features.pkl"
-VISION_CACHE = "preprocess/mosi/vision_cache"
-MAX_LEN = 300
+# =========================
+# Paths
+# =========================
 
-with open(PKL_PATH, "rb") as f:
-    data = pickle.load(f)
+SRC_PKL = "mosi.pkl"
+VISION_CACHE = "mosi/vision_cache"
+DST_PKL = "mosi_compact_with_vision.pkl"
+
+# =========================
+# Keys to keep
+# =========================
+
+KEEP_KEYS = {
+    "id",
+    "text",
+    "audio",
+    "audio_lengths",
+    "regression_labels"
+}
+
+# =========================
+# Load original data
+# =========================
+
+with open(SRC_PKL, "rb") as f:
+    src_data = pickle.load(f)
+
+dst_data = {}
+
+# =========================
+# Helper
+# =========================
+
+def load_vision(vid_clip):
+    """
+    vid_clip: video_id$_$clip_id
+    returns: features [K, 512], length K
+    """
+    video_id, clip_id = vid_clip.split("$_$")
+    path = os.path.join(VISION_CACHE, f"{video_id}_{clip_id}.npz")
+
+    cache = np.load(path)
+    feat = cache["features"]
+    return feat, feat.shape[0]
 
 
-def align_clip(vision_feat, timestamps, clip_len):
-    T = min(len(vision_feat), MAX_LEN)
-    feat = vision_feat[:T]
-    mask_len = T
-    if T < MAX_LEN:
-        feat = np.pad(feat, ((0, MAX_LEN - T), (0, 0)))
-    return feat, mask_len
-
+# =========================
+# Build new dataset
+# =========================
 
 for split in ["train", "valid", "test"]:
-    data[split]["vision"] = []
-    data[split]["vision_lengths"] = []
+    dst_data[split] = {}
 
-    for vid_clip in data[split]["id"]:
-        video_id = vid_clip.split("$_$")[0]
-        cache = np.load(f"{VISION_CACHE}/{video_id}.npz")
-        feat, length = align_clip(
-            cache["features"],
-            cache["timestamps"],
-            None
-        )
-        data[split]["vision"].append(feat)
-        data[split]["vision_lengths"].append(length)
+    # ---- copy required fields ----
+    for key in KEEP_KEYS:
+        dst_data[split][key] = src_data[split][key]
+
+    # ---- inject vision ----
+    visions = []
+    vision_lengths = []
+
+    for vid_clip in src_data[split]["id"]:
+        feat, length = load_vision(vid_clip)
+        visions.append(feat)
+        vision_lengths.append(length)
+
+    dst_data[split]["vision"] = visions
+    dst_data[split]["vision_lengths"] = vision_lengths
 
 
-with open("mosi_with_vision.pkl", "wb") as f:
-    pickle.dump(data, f)
+# =========================
+# Save
+# =========================
+
+with open(DST_PKL, "wb") as f:
+    pickle.dump(dst_data, f)
+
+print(f"Saved compact dataset to {DST_PKL}")

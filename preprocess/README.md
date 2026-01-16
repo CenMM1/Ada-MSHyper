@@ -29,4 +29,6 @@ pip install MMSA-FET
 pip install "numpy<2"
 python -m MSA_FET install
 pip install facenet-pytorch torch torchvision tqdm
+pip install opencv-python==4.11.0.86
+
 

@@ -23,7 +23,7 @@ import torchvision.transforms.functional as TF
 RAW_VIDEO_DIR = "mosi/Raw"
 CACHE_DIR = "mosi/vision_cache"
 
-K_FRAMES = 32            # 16 is enough + much faster
+K_FRAMES = 32
 FACE_SIZE = 224
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 NUM_DETECT_FRAMES = 3     # 前三帧
