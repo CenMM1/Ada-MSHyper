@@ -19,6 +19,12 @@ class Exp_Main(Exp_Basic):
         # 启用cuDNN优化，提升GPU利用率
         torch.backends.cudnn.benchmark = True
 
+    def _move_batch_to_device(self, batch_data):
+        for key in batch_data:
+            if isinstance(batch_data[key], torch.Tensor):
+                batch_data[key] = batch_data[key].float().to(self.device)
+        return batch_data
+
     def _build_model(self):
         model = MultimodalClassifier(self.args).float()
         num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -43,9 +49,7 @@ class Exp_Main(Exp_Basic):
         with torch.no_grad():
             for batch_data in vali_loader:
                 # 多模态数据是字典格式
-                for key in batch_data:
-                    if isinstance(batch_data[key], torch.Tensor):
-                        batch_data[key] = batch_data[key].float().to(self.device)
+                batch_data = self._move_batch_to_device(batch_data)
 
                 outputs, reg_loss = self.model(batch_data)
                 # 使用多模态标签作为目标
@@ -71,6 +75,7 @@ class Exp_Main(Exp_Basic):
         model_optim = self._select_optimizer()
         criterion = self._select_criterion()
 
+        last_batch = None
         for epoch in range(self.args.train_epochs):
             self.model.train()
             epoch_time = time.time()
@@ -82,9 +87,7 @@ class Exp_Main(Exp_Basic):
                     print(f'[Info] Processing batch {i}/{len(train_loader)}')
                 model_optim.zero_grad()
                 # 多模态数据是字典格式
-                for key in batch_data:
-                    if isinstance(batch_data[key], torch.Tensor):
-                        batch_data[key] = batch_data[key].float().to(self.device)
+                batch_data = self._move_batch_to_device(batch_data)
 
                 outputs, reg_loss = self.model(batch_data)
                 # 使用多模态标签作为目标
@@ -97,24 +100,16 @@ class Exp_Main(Exp_Basic):
 
                 loss.backward()
                 model_optim.step()
+                last_batch = batch_data
 
             train_loss = np.mean(train_loss)
             vali_loss = self.vali(vali_data, vali_loader, criterion)
             test_loss = self.vali(test_data, test_loader, criterion)
 
-            # 每个epoch结束时记录超图连接数
-            # 使用训练数据中的最后一个批次来获取超图结构
+            # 每个epoch结束时记录超图连接数（复用训练最后一个批次）
             try:
-                # 获取训练数据加载器的迭代器
-                train_iter = iter(train_loader)
-                last_batch = None
-                for batch_data in train_iter:
-                    last_batch = batch_data
-
                 if last_batch is not None:
-                    for key in last_batch:
-                        if isinstance(last_batch[key], torch.Tensor):
-                            last_batch[key] = last_batch[key].float().to(self.device)
+                    last_batch = self._move_batch_to_device(last_batch)
 
                     # 记录超图结构（在模型前向传播中会生成超图）
                     with torch.no_grad():
@@ -173,9 +168,7 @@ class Exp_Main(Exp_Basic):
             all_labels = []
             for batch_data in test_loader:
                 # 多模态数据是字典格式
-                for key in batch_data:
-                    if isinstance(batch_data[key], torch.Tensor):
-                        batch_data[key] = batch_data[key].float().to(self.device)
+                batch_data = self._move_batch_to_device(batch_data)
 
                 outputs, _ = self.model(batch_data)
                 preds = torch.argmax(outputs, dim=1).detach().cpu().numpy()

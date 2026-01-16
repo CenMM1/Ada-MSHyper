@@ -6,10 +6,9 @@ import numpy as np
 class Exp_Basic(object):
     def __init__(self, args):
         self.args = args
-        self.device = self._acquire_device()
-        # self.model = self._build_model().to(self.device)
-        self.model = self._build_model()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Use {'GPU: cuda' if self.device.type == 'cuda' else 'CPU'}")
+        self.model = self._build_model()
         self.model.to(self.device)
 
     def _build_model(self):
@@ -17,9 +16,9 @@ class Exp_Basic(object):
         return None
 
     def _acquire_device(self):
-        if self.args.use_gpu:
-            device = torch.device('cuda:0')
-            print('Use GPU: cuda:0')
+        if torch.cuda.is_available():
+            device = torch.device('cuda')
+            print('Use GPU: cuda')
         else:
             device = torch.device('cpu')
             print('Use CPU')

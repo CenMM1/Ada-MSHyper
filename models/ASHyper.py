@@ -371,17 +371,12 @@ class MaskedAdaptiveHypergraphGenerator(nn.Module):
         # 模态特定阈值，避免超图过密导致CUDA错误
         self.threshold = {'text': 0.001, 'audio': 0.1, 'video': 0.001}.get(self.modality, 0.1)
 
-        # 是否启用动态超图结构学习
-        self.dynamic = getattr(configs, 'dynamic_hypergraph', True)
+        # 仅启用动态超图结构学习
+        self.dynamic = True
 
-        if self.dynamic:
-            # 模态特定的可学习嵌入参数（用于动态结构学习）
-            self.node_embeds = nn.Parameter(torch.randn(self.seq_len, self.dim))  # 可学习节点嵌入
-            self.hyper_embeds = nn.Parameter(torch.randn(self.hyper_num, self.dim))  # 可学习超边嵌入
-        else:
-            # 静态：使用固定嵌入层
-            self.node_embed = nn.Embedding(self.seq_len, self.dim)  # 节点嵌入
-            self.hyperedge_embed = nn.Embedding(self.hyper_num, self.dim)  # 超边嵌入
+        # 模态特定的可学习嵌入参数（用于动态结构学习）
+        self.node_embeds = nn.Parameter(torch.randn(self.seq_len, self.dim))  # 可学习节点嵌入
+        self.hyper_embeds = nn.Parameter(torch.randn(self.hyper_num, self.dim))  # 可学习超边嵌入
 
         self.dropout = nn.Dropout(p=0.1)
 
@@ -404,18 +399,9 @@ class MaskedAdaptiveHypergraphGenerator(nn.Module):
         # 有效长度：不超过真实序列长度，避免后续超图节点索引越界
         effective_len = min(self.seq_len, seq_len)
 
-        if self.dynamic:
-            # 使用可学习嵌入（仅前 effective_len 个位置参与构图）
-            node_embeddings = self.node_embeds[:effective_len]  # [effective_len, dim]
-            hyperedge_embeddings = self.hyper_embeds  # [hyper_num, dim]
-        else:
-            # 使用固定嵌入层
-            node_embeddings = self.node_embed(
-                torch.arange(effective_len, device=features.device)
-            )  # [effective_len, dim]
-            hyperedge_embeddings = self.hyperedge_embed(
-                torch.arange(self.hyper_num, device=features.device)
-            )  # [hyper_num, dim]
+        # 使用可学习嵌入（仅前 effective_len 个位置参与构图）
+        node_embeddings = self.node_embeds[:effective_len]  # [effective_len, dim]
+        hyperedge_embeddings = self.hyper_embeds  # [hyper_num, dim]
 
         # 计算基础相似度（动态重计算）
         similarity = torch.mm(node_embeddings, hyperedge_embeddings.transpose(0, 1))  # [effective_len, hyper_num]

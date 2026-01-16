@@ -26,7 +26,6 @@ parser.add_argument('--num_classes', type=int, default=10, help='number of class
 parser.add_argument('--d_model', type=int, default=128, help='model dimension')
 parser.add_argument('--dropout', type=float, default=0.1, help='dropout')
 parser.add_argument('--k', type=int, default=3, help='top-k hyperedges per node')
-parser.add_argument('--dynamic_hypergraph', type=int, default=1, help='1: dynamic hypergraph structure, 0: static')
 parser.add_argument('--hyper_update_freq', type=int, default=5, help='update hypergraph every N steps to reduce computation')
 
 # Hypergraph Attention
@@ -62,8 +61,6 @@ parser.add_argument('--train_epochs', type=int, default=50, help='train epochs')
 parser.add_argument('--patience', type=int, default=5, help='early stopping patience')
 parser.add_argument('--itr', type=int, default=1, help='experiments times')
 parser.add_argument('--kappa', type=float, default=0.1, help='weight for ECR regularization (paper: κ)')
-# NOTE: legacy arg kept for backward compatibility; training loop no longer uses it.
-parser.add_argument('--loss_lambda', type=float, default=0.1, help='[DEPRECATED] legacy weight (unused). Use --kappa instead')
 
 args = parser.parse_args()
 
@@ -96,13 +93,12 @@ else:
 # /opt/miniforge3/bin/conda run -n py385
 # python run.py \
 #   --is_training 1 \
-#   --root_path ./preprocess/processed_data \
+#   --root_path ./datasets \
 #   --num_workers 8 \
 #   --num_classes 7 \
 #   --d_model 128 \
 #   --dropout 0.1 \
 #   --k 3 \
-#   --dynamic_hypergraph 1 \
 #   --hyper_update_freq 5 \
 #   --hyper_heads 1 \
 #   --hyper_multi_head_attention 0 \
