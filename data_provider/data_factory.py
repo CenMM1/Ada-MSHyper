@@ -1,8 +1,12 @@
-from data_provider.data_loader import Dataset_Multimodal_Classification
+from data_provider.data_loader import Dataset_Multimodal_Classification, Dataset_PKL_Multimodal_Classification
 from torch.utils.data import DataLoader
 
 def data_provider(args, flag):
-    Data = Dataset_Multimodal_Classification
+    data_format = getattr(args, 'data_format', 'pt')
+    if data_format == 'pkl':
+        Data = Dataset_PKL_Multimodal_Classification
+    else:
+        Data = Dataset_Multimodal_Classification
 
     if flag == 'test':
         shuffle_flag = False
@@ -16,7 +20,8 @@ def data_provider(args, flag):
     # 多模态数据加载
     data_set = Data(
         root_path=args.root_path,
-        flag=flag
+        flag=flag,
+        args=args
     )
 
     print(flag, len(data_set))

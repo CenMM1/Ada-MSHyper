@@ -17,6 +17,13 @@ parser.add_argument('--is_training', type=int, default=1, help='1: training, 0: 
 #      Data Config
 # =========================
 parser.add_argument('--root_path', type=str, default='./data', help='root path')
+parser.add_argument('--data_format', type=str, default='pt', choices=['pt', 'pkl'], help='data format: pt or pkl')
+parser.add_argument('--pkl_path', type=str, default='./preprocess/mosi_compact_with_vision.pkl', help='path to pkl dataset')
+parser.add_argument('--label_map', type=int, default=7,
+                    choices=[2, 5, 7],
+                    help='label mapping for regression labels (2/5/7)')
+parser.add_argument('--exclude_oob', type=int, default=1,
+                    help='for 5class_excl: exclude labels outside [-2,2]')
 parser.add_argument('--num_workers', type=int, default=4, help='data loader workers')
 parser.add_argument('--num_classes', type=int, default=10, help='number of classes')
 
@@ -26,6 +33,7 @@ parser.add_argument('--num_classes', type=int, default=10, help='number of class
 parser.add_argument('--d_model', type=int, default=128, help='model dimension')
 parser.add_argument('--dropout', type=float, default=0.1, help='dropout')
 parser.add_argument('--k', type=int, default=3, help='top-k hyperedges per node')
+parser.add_argument('--dynamic_hypergraph', type=int, default=1, help='1: dynamic hypergraph structure, 0: static')
 parser.add_argument('--hyper_update_freq', type=int, default=5, help='update hypergraph every N steps to reduce computation')
 
 # Hypergraph Attention
@@ -61,6 +69,8 @@ parser.add_argument('--train_epochs', type=int, default=50, help='train epochs')
 parser.add_argument('--patience', type=int, default=5, help='early stopping patience')
 parser.add_argument('--itr', type=int, default=1, help='experiments times')
 parser.add_argument('--kappa', type=float, default=0.1, help='weight for ECR regularization (paper: κ)')
+# NOTE: legacy arg kept for backward compatibility; training loop no longer uses it.
+parser.add_argument('--loss_lambda', type=float, default=0.1, help='[DEPRECATED] legacy weight (unused). Use --kappa instead')
 
 args = parser.parse_args()
 
@@ -94,11 +104,13 @@ else:
 # python run.py \
 #   --is_training 1 \
 #   --root_path ./datasets \
+#   --data_format pt \
 #   --num_workers 8 \
 #   --num_classes 7 \
 #   --d_model 128 \
 #   --dropout 0.1 \
 #   --k 3 \
+#   --dynamic_hypergraph 1 \
 #   --hyper_update_freq 5 \
 #   --hyper_heads 1 \
 #   --hyper_multi_head_attention 0 \
@@ -122,23 +134,27 @@ else:
 # python run.py \
 #   --is_training 1 \
 #   --root_path ./datasets \
+#   --data_format pkl \
+#   --pkl_path ./preprocess/mosi_all_feat.pkl \
+#   --label_map 7 \
+#   --exclude_oob 1 \
 #   --num_workers 8 \
 #   --num_classes 7 \
 #   --d_model 128 \
 #   --dropout 0.1 \
 #   --k 3 \
-#   --hyper_heads 4 \
-#   --hyper_multi_head_attention 1 \
-#   --hyper_num_text 50 \
-#   --hyper_num_audio 20 \
+#   --hyper_heads 1 \
+#   --hyper_multi_head_attention 0 \
+#   --hyper_num_text 10 \
+#   --hyper_num_audio 30 \
 #   --hyper_num_video 10 \
-#   --seq_len_text 160 \
-#   --seq_len_audio 518 \
-#   --seq_len_video 16 \
-#   --feature_dim_text 1024 \
-#   --feature_dim_audio 1024 \
-#   --feature_dim_video 2048 \
-#   --batch_size 100 \
+#   --seq_len_text 44 \
+#   --seq_len_audio 500 \
+#   --seq_len_video 32 \
+#   --feature_dim_text 768 \
+#   --feature_dim_audio 768 \
+#   --feature_dim_video 512 \
+#   --batch_size 64 \
 #   --learning_rate 0.0001 \
 #   --train_epochs 5 \
 #   --patience 5 \

@@ -8,3 +8,9 @@ git config --global user.name "CenMM1"
 
 /venv/py385/lib/python3.8/site-packages/torch_geometric/nn/conv/message_passing.py
 
+rclone mkdir gdrive:mosi_datasets
+rclone copy mosi_compact_with_vision_fp16.pkl gdrive:mosi_datasets \
+  --progress \
+  --transfers=2 \
+  --checkers=4
+

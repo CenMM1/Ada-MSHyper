@@ -6,7 +6,7 @@ import pickle
 import numpy as np
 from collections import Counter
 
-PKL_PATH = "mosi_compact_with_vision.pkl"
+PKL_PATH = "mosi_all_feat.pkl"
 PREVIEW_N = 1
 
 
@@ -87,6 +87,34 @@ def check_split(split_name, split_data):
             print(f"  label (regression): {y}")
 
         print()
+
+    # -------------------------
+    # Label stats
+    # -------------------------
+    if "regression_labels" in split_data:
+        labels = split_data["regression_labels"]
+        if isinstance(labels, np.ndarray):
+            labels = labels.tolist()
+        if len(labels) > 0:
+            min_v = min(labels)
+            max_v = max(labels)
+            print("-" * 80)
+            print("Label stats")
+            print("-" * 80)
+            print(f"min={min_v} max={max_v}")
+            oob = [y for y in labels if y >= 3 or y < -3]
+            print(f"oob>=3 or < -3: {len(oob)}")
+            bins = [-3, -2, -1, 0, 1, 2, 3]
+            def map_label(y):
+                for idx, edge in enumerate(bins):
+                    if y < edge:
+                        return idx
+                return len(bins)
+            mapped = [map_label(y) for y in labels]
+            counts = Counter(mapped)
+            print(f"mapped min/max {min(mapped)} {max(mapped)}")
+            print(f"mapped counts {counts}")
+            print()
 
 
 def main():
