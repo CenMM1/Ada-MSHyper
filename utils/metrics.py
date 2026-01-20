@@ -6,10 +6,16 @@ def RSE(pred, true):
 
 
 def CORR(pred, true):
+    pred = np.asarray(pred)
+    true = np.asarray(true)
+    if pred.ndim == 1:
+        pred = pred.reshape(-1, 1)
+    if true.ndim == 1:
+        true = true.reshape(-1, 1)
     u = ((true - true.mean(0)) * (pred - pred.mean(0))).sum(0)
     d = np.sqrt(((true - true.mean(0)) ** 2 * (pred - pred.mean(0)) ** 2).sum(0))
     d += 1e-12
-    return 0.01*(u / d).mean(-1)
+    return 0.01 * (u / d).mean(-1)
 
 
 def MAE(pred, true):

@@ -7,6 +7,7 @@ from utils.metrics import metric
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch import optim
 import os
 import time
@@ -18,6 +19,31 @@ class Exp_Main(Exp_Basic):
         super(Exp_Main, self).__init__(args)
         # 启用cuDNN优化，提升GPU利用率
         torch.backends.cudnn.benchmark = True
+        self.task_mode = str(getattr(args, 'task_mode', 'classification'))
+        self.data_format = str(getattr(args, 'data_format', 'pt'))
+        self.reg_weight = 0.0 if self.task_mode == 'ordinal' else 1.0
+        self.loss_mode = str(getattr(args, 'loss_mode', 'bce'))
+        self.reg_loss_weight = float(getattr(args, 'reg_loss_weight', 0.05))
+        self.reg_loss_type = str(getattr(args, 'reg_loss_type', 'mae'))
+        self.reg_huber_delta = float(getattr(args, 'reg_huber_delta', 1.0))
+        self.use_coral = bool(getattr(args, 'use_coral', 0))
+        self.use_mosi_ecr = bool(getattr(args, 'use_mosi_ecr', 0))
+        self.ecr_warmup_epochs = int(getattr(args, 'ecr_warmup_epochs', 10))
+        self.ecr_target_kappa = float(getattr(args, 'ecr_target_kappa', 0.0001))
+        self.disable_epc = bool(getattr(args, 'disable_epc', 0))
+        self._log_task_config()
+
+    def _log_task_config(self):
+        if self.data_format == 'pkl' and self.task_mode == 'ordinal':
+            print('[Info] Dataset: MOSI')
+            print('[Info] Format: pkl')
+            print('[Info] Task mode: ordinal')
+            print('[Info] Label encoding: ordinal (6 thresholds)')
+            print(f'[Info] Loss: {self.loss_mode}')
+            print(f'[Info] Regression penalty: {self.reg_loss_type} (lambda={self.reg_loss_weight})')
+            print('[Info] Eval metrics: MAE / Corr / ACC7(report only)')
+            print(f'[Info] CORAL enabled: {self.use_coral}')
+            print(f'[Info] MOSI ECR warm-up enabled: {self.use_mosi_ecr}')
 
     def _move_batch_to_device(self, batch_data):
         for key in batch_data:
@@ -41,10 +67,38 @@ class Exp_Main(Exp_Basic):
         return optim.Adam(self.model.parameters(), lr=self.args.learning_rate)
 
     def _select_criterion(self):
+        if self.task_mode == 'ordinal':
+            if self.loss_mode == 'coral':
+                return nn.BCEWithLogitsLoss()
+            if self.loss_mode == 'pos_weight':
+                pos_weight = torch.tensor([1.0, 1.2, 1.4, 1.4, 1.2, 1.0], device=self.device)
+                return nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+            return nn.BCEWithLogitsLoss()
         return nn.CrossEntropyLoss()
+
+    def _ordinal_loss(self, outputs, targets, criterion):
+        if self.loss_mode == 'coral':
+            return criterion(outputs, targets)
+        if self.loss_mode == 'focal':
+            bce = F.binary_cross_entropy_with_logits(outputs, targets, reduction='none')
+            probs = torch.sigmoid(outputs)
+            pt = torch.where(targets > 0.5, probs, 1 - probs)
+            gamma = 2.0
+            loss = ((1 - pt) ** gamma) * bce
+            return loss.mean()
+        return criterion(outputs, targets)
+
+    def _ordinal_reg_penalty(self, outputs, targets):
+        pred = torch.sigmoid(outputs).sum(dim=1) - 3.0
+        true = targets.sum(dim=1) - 3.0
+        if self.reg_loss_type == 'huber':
+            return F.huber_loss(pred, true, delta=self.reg_huber_delta)
+        return F.l1_loss(pred, true)
 
     def vali(self, vali_data, vali_loader, criterion):
         total_loss = []
+        metric_mae = []
+        metric_corr = []
         self.model.eval()
         with torch.no_grad():
             for batch_data in vali_loader:
@@ -52,14 +106,27 @@ class Exp_Main(Exp_Basic):
                 batch_data = self._move_batch_to_device(batch_data)
 
                 outputs, reg_loss = self.model(batch_data)
-                # 使用多模态标签作为目标
-                targets = batch_data['label_multimodal'].long()
-
-                # 论文目标：L_total = L_ER + κ * L_ECR
-                loss = criterion(outputs, targets) + reg_loss
+                if self.task_mode == 'ordinal':
+                    targets = batch_data['label_ordinal']
+                    reg_penalty = self._ordinal_reg_penalty(outputs, targets)
+                    loss = self._ordinal_loss(outputs, targets, criterion) + self.reg_weight * reg_loss + self.reg_loss_weight * reg_penalty
+                    pred = torch.sigmoid(outputs).sum(dim=1) - 3.0
+                    true = targets.sum(dim=1) - 3.0
+                    mae, _, _, _, _, _, corr = metric(pred.detach().cpu().numpy(), true.detach().cpu().numpy())
+                    metric_mae.append(mae)
+                    metric_corr.append(corr)
+                else:
+                    # 使用多模态标签作为目标
+                    targets = batch_data['label_multimodal'].long()
+                    # 论文目标：L_total = L_ER + κ * L_ECR
+                    loss = criterion(outputs, targets) + reg_loss
                 total_loss.append(loss)
 
         total_loss = torch.stack(total_loss).mean()
+        if self.task_mode == 'ordinal' and metric_mae:
+            mae = float(np.mean(metric_mae))
+            corr = float(np.mean(metric_corr))
+            print(f'[Info] Vali MAE: {mae:.4f} | Corr: {corr:.4f}')
         self.model.train()
         return total_loss
 
@@ -80,6 +147,15 @@ class Exp_Main(Exp_Basic):
             self.model.train()
             epoch_time = time.time()
             train_loss = []
+            train_mae = []
+            train_corr = []
+
+            if self.use_mosi_ecr and self.task_mode == 'ordinal':
+                if epoch < self.ecr_warmup_epochs:
+                    self.reg_weight = 0.0
+                else:
+                    progress = (epoch - self.ecr_warmup_epochs + 1) / max(1, (self.args.train_epochs - self.ecr_warmup_epochs))
+                    self.reg_weight = self.ecr_target_kappa * min(max(progress, 0.0), 1.0)
 
 
             for i, batch_data in enumerate(train_loader):
@@ -90,11 +166,20 @@ class Exp_Main(Exp_Basic):
                 batch_data = self._move_batch_to_device(batch_data)
 
                 outputs, reg_loss = self.model(batch_data)
-                # 使用多模态标签作为目标
-                targets = batch_data['label_multimodal'].long()
-
-                # 论文目标：L_total = L_ER + κ * L_ECR
-                loss = criterion(outputs, targets) + reg_loss
+                if self.task_mode == 'ordinal':
+                    targets = batch_data['label_ordinal']
+                    reg_penalty = self._ordinal_reg_penalty(outputs, targets)
+                    loss = self._ordinal_loss(outputs, targets, criterion) + self.reg_weight * reg_loss + self.reg_loss_weight * reg_penalty
+                    pred = torch.sigmoid(outputs).sum(dim=1) - 3.0
+                    true = targets.sum(dim=1) - 3.0
+                    mae, _, _, _, _, _, corr = metric(pred.detach().cpu().numpy(), true.detach().cpu().numpy())
+                    train_mae.append(mae)
+                    train_corr.append(corr)
+                else:
+                    # 使用多模态标签作为目标
+                    targets = batch_data['label_multimodal'].long()
+                    # 论文目标：L_total = L_ER + κ * L_ECR
+                    loss = criterion(outputs, targets) + reg_loss
 
                 train_loss.append(loss.item())
 
@@ -138,7 +223,19 @@ class Exp_Main(Exp_Basic):
             except Exception as e:
                 print(f"Warning: Could not record hypergraphs at epoch end: {e}")
 
-            print(f"Epoch: {epoch + 1}, Time: {time.time() - epoch_time:.2f}s | Train Loss: {train_loss:.7f} Vali Loss: {vali_loss:.7f} Test Loss: {test_loss:.7f}")
+            if self.task_mode == 'ordinal' and train_mae:
+                avg_mae = float(np.mean(train_mae))
+                avg_corr = float(np.mean(train_corr))
+                print(
+                    f"Epoch: {epoch + 1}, Time: {time.time() - epoch_time:.2f}s | "
+                    f"Train Loss: {train_loss:.7f} Vali Loss: {vali_loss:.7f} Test Loss: {test_loss:.7f} "
+                    f"| Train MAE: {avg_mae:.4f} Corr: {avg_corr:.4f}"
+                )
+            else:
+                print(
+                    f"Epoch: {epoch + 1}, Time: {time.time() - epoch_time:.2f}s | "
+                    f"Train Loss: {train_loss:.7f} Vali Loss: {vali_loss:.7f} Test Loss: {test_loss:.7f}"
+                )
             early_stopping(vali_loss, self.model, path)
 
             if early_stopping.early_stop:
@@ -171,13 +268,41 @@ class Exp_Main(Exp_Basic):
                 batch_data = self._move_batch_to_device(batch_data)
 
                 outputs, _ = self.model(batch_data)
-                preds = torch.argmax(outputs, dim=1).detach().cpu().numpy()
-                labels = batch_data['label_multimodal'].detach().cpu().numpy()
+                if self.task_mode == 'ordinal':
+                    targets = batch_data['label_ordinal']
+                    pred = torch.sigmoid(outputs).sum(dim=1) - 3.0
+                    true = targets.sum(dim=1) - 3.0
+                    all_preds.extend(pred.detach().cpu().numpy())
+                    all_labels.extend(true.detach().cpu().numpy())
+                else:
+                    preds = torch.argmax(outputs, dim=1).detach().cpu().numpy()
+                    labels = batch_data['label_multimodal'].detach().cpu().numpy()
+                    all_preds.extend(preds)
+                    all_labels.extend(labels)
 
-                all_preds.extend(preds)
-                all_labels.extend(labels)
+            if self.task_mode == 'ordinal':
+                all_preds = np.array(all_preds)
+                all_labels = np.array(all_labels)
+                mae, _, _, _, _, _, corr = metric(all_preds, all_labels)
+                pred_round = np.clip(np.round(all_preds + 3), 0, 6)
+                true_round = np.clip(np.round(all_labels + 3), 0, 6)
+                acc7 = np.mean(pred_round == true_round)
+                print(f'MAE: {mae:.4f}')
+                print(f'Corr: {corr:.4f}')
+                print(f'ACC7 (report only): {acc7:.4f}')
 
-            # 计算详细的分类指标
+                with open('test_results.txt', 'a') as f:
+                    f.write(f'Setting: {setting}\n')
+                    f.write('Task mode: ordinal\n')
+                    f.write('Label encoding: ordinal (6 thresholds)\n')
+                    f.write(f'MAE: {mae:.4f}\n')
+                    f.write(f'Corr: {corr:.4f}\n')
+                    f.write(f'ACC7 (report only): {acc7:.4f}\n')
+                    f.write('\n' + '='*50 + '\n')
+
+                return mae
+
+            # classification path
             all_preds = np.array(all_preds)
             all_labels = np.array(all_labels)
             accuracy = np.mean(all_preds == all_labels)

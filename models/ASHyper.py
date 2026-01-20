@@ -15,24 +15,6 @@ from math import sqrt
 from torch_geometric.utils import scatter
 import math
 
-
-class InterModalAttention(nn.Module):
-    """模态间注意力机制"""
-    def __init__(self, d_model):
-        super().__init__()
-        self.query_weight = nn.Linear(d_model, d_model)
-        self.key_weight = nn.Linear(d_model, d_model)
-        self.value_weight = nn.Linear(d_model, d_model)
-
-    def forward(self, x):
-        q = self.query_weight(x)
-        k = self.key_weight(x)
-        v = self.value_weight(x)
-        attention_scores = F.softmax(torch.matmul(q, k.transpose(1, 2)) / (k.shape[-1] ** 0.5), dim=-1)
-        attended_values = torch.matmul(attention_scores, v)
-        return attended_values
-
-
 class CrossModalHyperedgeInteraction(nn.Module):
     """论文式跨模态超边交互：按目标模态 m 做 cross-attn（m←n）并带残差项。
 
@@ -150,19 +132,15 @@ class HypergraphConv(MessagePassing):
             out = alpha.unsqueeze(-1) * out
         return out
 
-    def node2edge(self, hyperedge_index, x_node, norm_node=None, alpha=None, project=True):
+    def node2edge(self, hyperedge_index, x_node, norm_node=None, alpha=None):
         """
         节点到超边的传播：提取超边特征
         hyperedge_index: [2, num_conn], row=node_id, col=edge_id
         x_node: [B, N, d] 节点特征
         norm_node: 节点侧的归一化系数
         alpha: [num_conn] or [B, num_conn, 1] 节点-超边注意力
-        project: 是否在该函数内部对节点特征做线性投影
         return: x_edge: [B, M, d] 超边特征
         """
-        # 应用权重变换（默认进行投影，可在forward中复用已投影特征）
-        if project:
-            x_node = torch.matmul(x_node, self.weight)  # [B, N, out_channels]
         x_node = x_node.transpose(0, 1)  # [N, B, d]
 
         # 设置传播方向
@@ -213,7 +191,6 @@ class HypergraphConv(MessagePassing):
 
         # 1) 先对节点特征做线性投影
         x_proj = torch.matmul(x, self.weight)  # [B, N, out_channels]
-        x1 = x_proj.transpose(0, 1)  # [N, B, out_channels]
 
         # 2) 计算节点度和超边度
         node_index = hyperedge_index[0]  # [E]
@@ -228,42 +205,23 @@ class HypergraphConv(MessagePassing):
         B_norm = 1.0 / edge_deg
         B_norm[B_norm == float("inf")] = 0
 
-        # 3) 计算每条关联 (node, hyperedge) 对的节点/超边表示
-        # x_i: 节点特征（按超边连接展开）
-        x_i = x1[node_index]  # [E, B, out_channels]
-
-        # 计算每条超边的特征和 (edge_sums)
-        edge_sums = torch.zeros(
-            num_edges, batch_size, self.out_channels,
-            device=x.device, dtype=x.dtype
-        )
-        edge_sums = edge_sums.index_add(0, edge_index, x_i)  # [M, B, out_channels]
-
-        # x_j: 对应每条 (node, hyperedge) 的超边特征
-        x_j = edge_sums[edge_index]  # [E, B, out_channels]
-
-        # 4) 计算约束损失（超边间的几何约束 + 节点-超边差异）
-        # 将超边特征展平到一个向量空间后计算两两相似度和距离
-        edge_flat = edge_sums.reshape(num_edges, -1)  # [M, B * out_channels]
-        edge_flat_norm = F.normalize(edge_flat, p=2, dim=1)
-        cos_sim = torch.mm(edge_flat_norm, edge_flat_norm.t())  # [M, M]
-
-        diff = edge_flat.unsqueeze(1) - edge_flat.unsqueeze(0)  # [M, M, D']
-        dist = diff.norm(dim=-1)  # [M, M]
-
-        alpha_cm = cos_sim
-        margin = 4.2
-        loss_item = alpha_cm * dist + (1 - alpha_cm) * torch.clamp(margin - dist, min=0.0)
-        loss_hyper = torch.abs(loss_item.mean())
-        loss_hyper = loss_hyper / ((num_edges + 1) ** 2)
-
-        constrain = x_i - x_j  # [E, B, out_channels]
-        constrain_lossfin1 = torch.mean(constrain)
-        constrain_losstotal = torch.abs(constrain_lossfin1) + loss_hyper
-
-        # 5) 计算节点-超边注意力权重 alpha
+        # 3) 计算节点-超边注意力权重 alpha（仅在需要时构造 x_i/x_j）
         alpha = None
         if self.use_attention:
+            x1 = x_proj.transpose(0, 1)  # [N, B, out_channels]
+            # x_i: 节点特征（按超边连接展开）
+            x_i = x1[node_index]  # [E, B, out_channels]
+
+            # 计算每条超边的特征和 (edge_sums)
+            edge_sums = torch.zeros(
+                num_edges, batch_size, self.out_channels,
+                device=x.device, dtype=x.dtype
+            )
+            edge_sums = edge_sums.index_add(0, edge_index, x_i)  # [M, B, out_channels]
+
+            # x_j: 对应每条 (node, hyperedge) 的超边特征
+            x_j = edge_sums[edge_index]  # [E, B, out_channels]
+
             # 单头注意力（向后兼容）：与当前实现保持完全一致
             if (not self.multi_head_attention) or self.heads == 1:
                 # 拼接节点和超边特征，然后与可学习向量 self.att 做点乘
@@ -278,12 +236,8 @@ class HypergraphConv(MessagePassing):
                 e = (cat_ij * att_vec).sum(dim=-1)  # [E, B]
                 e = F.leaky_relu(e, self.negative_slope)
 
-                # 对每个 batch 独立做 softmax，按节点维度规范化
-                alphas = []
-                for b in range(batch_size):
-                    alpha_b = softmax(e[:, b], node_index, num_nodes=num_nodes)  # [E]
-                    alphas.append(alpha_b)
-                alpha = torch.stack(alphas, dim=1)  # [E, B]
+                # 按节点维度规范化（向量化）
+                alpha = softmax(e, node_index, num_nodes=num_nodes)  # [E, B]
                 alpha = F.dropout(alpha, p=self.dropout, training=self.training)
             else:
                 # 多头注意力：在 head 维度上显式建模，然后聚合回单一 alpha
@@ -314,32 +268,21 @@ class HypergraphConv(MessagePassing):
                 e = (cat_ij * att_vec).sum(dim=-1)
                 e = F.leaky_relu(e, self.negative_slope)
 
-                # 对每个 batch、每个 head 独立做 softmax，按节点维度规范化
-                alphas = []
-                for b in range(batch_size):
-                    alpha_b_heads = []
-                    for h in range(self.heads):
-                        # e[:, b, h]: [E]
-                        alpha_bh = softmax(e[:, b, h], node_index, num_nodes=num_nodes)  # [E]
-                        alpha_b_heads.append(alpha_bh)
-                    # [E, heads]
-                    alpha_b = torch.stack(alpha_b_heads, dim=1)
-                    alphas.append(alpha_b)
-
-                # [E, B, heads]
-                alpha = torch.stack(alphas, dim=1)
+                # 向量化 softmax：[E, B, heads] -> [E, B * heads]
+                e_flat = e.reshape(e.size(0), -1)
+                alpha_flat = softmax(e_flat, node_index, num_nodes=num_nodes)
+                alpha = alpha_flat.view(e.size(0), batch_size, self.heads)
 
                 # 将多头注意力聚合为单一权重（这里取平均，后续可做 ablation 改为求和等）
                 alpha = alpha.sum(dim=-1) / self.heads  # [E, B]
                 alpha = F.dropout(alpha, p=self.dropout, training=self.training)
 
-        # 6) 使用注意力和归一化系数做 Node -> Edge -> Node 双向传播
+        # 4) 使用注意力和归一化系数做 Node -> Edge -> Node 双向传播
         x_edge = self.node2edge(
             hyperedge_index=hyperedge_index,
             x_node=x_proj,          # 已投影的节点特征
             norm_node=B_norm,      # 超边侧的归一化
             alpha=alpha,
-            project=False,         # 已经投影过，这里不再重复
         )
         x_updated = self.edge2node(
             hyperedge_index=hyperedge_index,
@@ -348,6 +291,7 @@ class HypergraphConv(MessagePassing):
             alpha=alpha,
         )
 
+        constrain_losstotal = torch.tensor(0.0, device=x.device, dtype=x.dtype)
         return x_updated, constrain_losstotal
 
     def __repr__(self):
@@ -533,7 +477,23 @@ class MultimodalClassifier(nn.Module):
         self.step_counter = 0
 
         # 按照HyperGAMER论文的融合方式 - 6 * d_model (3模态 × 2表示)
-        self.classifier = nn.Linear(6 * configs.d_model, getattr(configs, 'num_classes', 10))
+        self.task_mode = str(getattr(configs, 'task_mode', 'classification'))
+        self.use_coral = bool(getattr(configs, 'use_coral', 0))
+        self.num_ordinal_levels = int(getattr(configs, 'num_ordinal_levels', 7))
+        output_dim = (self.num_ordinal_levels - 1) if (self.task_mode == 'ordinal') else getattr(configs, 'num_classes', 10)
+        self.classifier = nn.Linear(6 * configs.d_model, output_dim)
+
+        # CORAL learnable thresholds (K-1), monotonic via positive deltas
+        if self.task_mode == 'ordinal' and self.use_coral:
+            init_thresholds = getattr(configs, 'ordinal_thresholds', [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5])
+            if len(init_thresholds) != (self.num_ordinal_levels - 1):
+                raise ValueError(
+                    f"Expected {self.num_ordinal_levels - 1} thresholds, got {len(init_thresholds)}"
+                )
+            init_thresholds = torch.tensor(init_thresholds, dtype=torch.float32)
+            init_deltas = torch.diff(init_thresholds, prepend=init_thresholds[:1])
+            self.coral_deltas = nn.Parameter(init_deltas)
+            self.coral_base = nn.Parameter(init_thresholds[:1].clone())
 
     def forward(self, batch_data, x_mark_enc=None):
         """
@@ -558,8 +518,7 @@ class MultimodalClassifier(nn.Module):
         # 模态内处理 - 第一阶段：Node -> Edge (提取超边特征)
         modal_hyper_reprs = []  # 各模态的超边特征
         modal_hypergraphs = []  # 各模态的超图结构
-        # 使用标量 Tensor 以便与约束损失累加，并保持梯度
-        total_constrain_loss = torch.tensor(0.0, device=text_features.device)
+        modal_seq_lens = []
 
         # 检查是否需要更新超图结构
         self.step_counter += 1
@@ -570,23 +529,22 @@ class MultimodalClassifier(nn.Module):
             ('audio', audio_features, audio_mask),
             ('video', video_features, video_mask),
         ]):
+            modal_seq_lens.append(features.shape[1])
             # 生成模态内超图（动态模式下按频率更新）
             hypergraphs = self.hyper_generators[i](features, mask, update_hyper=update_hyper)
             hypergraph = hypergraphs[0].to(features.device)
             modal_hypergraphs.append(hypergraph)
 
             # 使用超图卷积的 forward 完整走一遍 Node -> Edge -> Node，并获得约束损失
-            updated_nodes_pre, constrain_loss_mod = self.hyper_convs[i](
+            updated_nodes_pre, _ = self.hyper_convs[i](
                 features,
                 hypergraph
             )
-            total_constrain_loss = total_constrain_loss + constrain_loss_mod
 
             # 使用更新后的节点特征再次做 Node -> Edge，用于跨模态超边注意力
             hyper_repr = self.hyper_convs[i].node2edge(
                 hyperedge_index=hypergraph,
                 x_node=updated_nodes_pre,
-                project=False,
             )
             modal_hyper_reprs.append(hyper_repr)
 
@@ -604,11 +562,7 @@ class MultimodalClassifier(nn.Module):
         modal_outputs = []
         for i, (hypergraph, enhanced_hyper_repr) in enumerate(zip(modal_hypergraphs, enhanced_hyper_reprs)):
             # 获取模态的序列长度
-            seq_len_modality = [
-                text_features.shape[1],
-                audio_features.shape[1],
-                video_features.shape[1],
-            ][i]
+            seq_len_modality = modal_seq_lens[i]
 
             # Edge -> Node传播：利用跨模态增强后的超边特征更新节点
             updated_node_features = self.hyper_convs[i].edge2node(
@@ -636,7 +590,12 @@ class MultimodalClassifier(nn.Module):
         # 多模态融合
         Z_fusion = torch.cat(modal_summaries, dim=1)  # [batch_size, 6 * d_model]
         # 分类输出
-        logits = self.classifier(Z_fusion)  # [batch_size, num_classes]
+        logits = self.classifier(Z_fusion)  # [batch_size, out_dim]
+
+        if self.task_mode == 'ordinal' and self.use_coral:
+            deltas = F.softplus(self.coral_deltas)
+            thresholds = self.coral_base + torch.cumsum(deltas, dim=0)
+            logits = logits - thresholds.view(1, -1)
 
         # 计算情感一致性正则化 (ECR)
         # 论文：ECR 作用在跨模态交互后的超边表示 \tilde{E}_m 上
@@ -648,10 +607,6 @@ class MultimodalClassifier(nn.Module):
         # 训练脚本应当：loss = CE(logits, y) + κ * L_ECR
         # =========================
         reg_loss = self.kappa * ecr_loss
-
-        # 保留 total_constrain_loss 的计算以兼容历史实验，但不再作为论文目标的一部分输出。
-        # 若仍希望使用该额外正则，可在外部自行加到 loss 中。
-        _ = total_constrain_loss / len(self.modalities)
 
         return logits, reg_loss
 

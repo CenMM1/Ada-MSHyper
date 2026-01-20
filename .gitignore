@@ -142,6 +142,7 @@ preprocess/processed_data/*
 test_results.txt
 preprocess/mos*
 hypergraph_*
+grid_results/*
 
 
 

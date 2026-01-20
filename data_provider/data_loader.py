@@ -120,6 +120,7 @@ class Dataset_PKL_Multimodal_Classification(Dataset):
         self.pkl_path = getattr(args, 'pkl_path', None) if args is not None else None
         self.label_map = int(getattr(args, 'label_map', 7)) if args is not None else 7
         self.exclude_oob = bool(getattr(args, 'exclude_oob', 1)) if args is not None else True
+        self.task_mode = str(getattr(args, 'task_mode', 'classification')) if args is not None else 'classification'
 
         self.__read_data__()
 
@@ -194,6 +195,13 @@ class Dataset_PKL_Multimodal_Classification(Dataset):
                 filtered.append(i)
             self.indices = filtered
 
+    def _map_label_ordinal(self, y):
+        """Ordinal encoding for MOSI/MOSEI with fixed thresholds."""
+        y_val = float(y)
+        thresholds = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5]
+        ordinal = [1.0 if y_val > t else 0.0 for t in thresholds]
+        return torch.tensor(ordinal, dtype=torch.float32)
+
     def __getitem__(self, index):
         idx = self.indices[index]
 
@@ -223,6 +231,20 @@ class Dataset_PKL_Multimodal_Classification(Dataset):
         if vl > 0:
             video_mask[:min(vl, video_mask.shape[0])] = 1.0
 
+        if self.task_mode == 'ordinal':
+            raw_label = float(self.labels_reg[idx])
+            ordinal_targets = self._map_label_ordinal(raw_label)
+            return {
+                'text_vector': text_tensor,
+                'audio_vector': audio_tensor,
+                'video_vector': video_tensor,
+                'text_mask': text_mask,
+                'audio_mask': audio_mask,
+                'video_mask': video_mask,
+                'label_ordinal': ordinal_targets,
+                'label_reg': torch.tensor(raw_label, dtype=torch.float32),
+            }
+
         label_mapped = self._map_label(self.labels_reg[idx])
         if label_mapped is None:
             label_mapped = 0
@@ -244,8 +266,6 @@ class Dataset_PKL_Multimodal_Classification(Dataset):
 
     def __len__(self):
         return len(self.indices)
-
-
 
 
 
