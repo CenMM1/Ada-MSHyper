@@ -1,0 +1,66 @@
+Args: Namespace(batch_size=64, d_model=128, data_format='pkl', disable_epc=0, dropout=0.1, dynamic_hypergraph=1, ecr_target_kappa=0.0001, ecr_warmup_epochs=10, exclude_oob=1, feature_dim_audio=768, feature_dim_text=768, feature_dim_video=512, hyper_heads=1, hyper_multi_head_attention=0, hyper_num_audio=50, hyper_num_text=20, hyper_num_video=10, hyper_update_freq=5, is_training=1, itr=1, k=3, kappa=0.0001, label_map=7, learning_rate=0.01, loss_lambda=0.1, loss_mode='pos_weight', num_classes=7, num_ordinal_levels=7, num_workers=8, patience=3, pkl_path='./preprocess/mosi_all_feat.pkl', root_path='./datasets', seq_len_audio=500, seq_len_text=44, seq_len_video=32, task_mode='ordinal', train_epochs=10, use_coral=0, use_gpu=True, use_mosi_ecr=1)
+Use GPU: cuda
+[Info] Number of parameters: 417542
+[Info] Dataset: MOSI
+[Info] Format: pkl
+[Info] Task mode: ordinal
+[Info] Label encoding: ordinal (6 thresholds)
+[Info] Loss: pos_weight
+[Info] Eval metrics: MAE / Corr / ACC7(report only)
+[Info] CORAL enabled: False
+[Info] MOSI ECR warm-up enabled: True
+>>> Start training: MultimodalClassifier_multimodal_dm128_nc7_0 >>>
+[Info] Loading train data...
+train 1284
+[Info] train data loaded: 1284 samples
+[Info] Loading val data...
+val 229
+[Info] val data loaded: 229 samples
+[Info] Loading test data...
+test 686
+[Info] test data loaded: 686 samples
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 1.3967 | Corr: 0.0219
+[Info] Vali MAE: 1.5562 | Corr: -0.0003
+Epoch: 1, Time: 9.97s | Train Loss: 1.0655745 Vali Loss: 0.5249890 Test Loss: 0.5779908 | Train MAE: 1.3880 Corr: 0.0067
+Validation loss decreased (inf --> 0.524989).  Saving model ...
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 1.3532 | Corr: 0.0265
+[Info] Vali MAE: 1.4578 | Corr: 0.0059
+Epoch: 2, Time: 7.09s | Train Loss: 0.5304442 Vali Loss: 0.5144843 Test Loss: 0.5393769 | Train MAE: 1.3468 Corr: 0.0119
+Validation loss decreased (0.524989 --> 0.514484).  Saving model ...
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 1.3895 | Corr: 0.0291
+[Info] Vali MAE: 1.5298 | Corr: -0.0101
+Epoch: 3, Time: 7.13s | Train Loss: 0.5416808 Vali Loss: 0.5400338 Test Loss: 0.5595501 | Train MAE: 1.3412 Corr: 0.0107
+EarlyStopping counter: 1 out of 3
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 1.3705 | Corr: 0.0324
+[Info] Vali MAE: 1.4810 | Corr: 0.0185
+Epoch: 4, Time: 7.16s | Train Loss: 0.5494263 Vali Loss: 0.5213443 Test Loss: 0.5350380 | Train MAE: 1.3430 Corr: 0.0149
+EarlyStopping counter: 2 out of 3
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 1.3777 | Corr: 0.0194
+[Info] Vali MAE: 1.4445 | Corr: 0.0105
+Epoch: 5, Time: 7.15s | Train Loss: 0.5342218 Vali Loss: 0.5450665 Test Loss: 0.5355981 | Train MAE: 1.2880 Corr: 0.0287
+EarlyStopping counter: 3 out of 3
+Early stopping
+>>> Testing: MultimodalClassifier_multimodal_dm128_nc7_0 <<<
+[Info] Loading test data...
+test 686
+[Info] test data loaded: 686 samples
+MAE: 1.4890
+Corr: 0.0149
+ACC7 (report only): 0.1516
+
+
+/workspace/Ada-MSHyper/utils/metrics.py:34: RuntimeWarning: divide by zero encountered in divide
+  return np.mean(np.abs((pred - true) / true))
+/workspace/Ada-MSHyper/utils/metrics.py:38: RuntimeWarning: divide by zero encountered in divide
+  return np.mean(np.square((pred - true) / true))
+

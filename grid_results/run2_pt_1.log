@@ -1,0 +1,207 @@
+Args: Namespace(attn_pooling_dropout=0.1, batch_size=128, d_model=128, data_format='pt', disable_epc=0, dropout=0.1, dynamic_hypergraph=1, ecr_target_kappa=0.0001, ecr_warmup_epochs=10, exclude_oob=1, feature_dim_audio=1024, feature_dim_text=1024, feature_dim_video=2048, hyper_heads=1, hyper_multi_head_attention=0, hyper_num_audio=20, hyper_num_text=30, hyper_num_video=10, hyper_tau=0.5, hyper_topk=3, hyper_update_freq=5, is_training=1, itr=1, k=3, kappa=0.0, label_map=7, learning_rate=0.0001, loss_lambda=0.1, loss_mode='bce', num_classes=7, num_ordinal_levels=7, num_workers=8, patience=3, pkl_path='./preprocess/mosi_compact_with_vision.pkl', reg_huber_delta=1.0, reg_loss_type='mae', reg_loss_weight=0.05, root_path='./preprocess/processed_data', seq_len_audio=518, seq_len_text=160, seq_len_video=16, setting_suffix='pt_run2_1', task_mode='classification', train_epochs=10, use_attn_pooling=0, use_coral=0, use_gpu=True, use_head_ln=0, use_modal_gate=0, use_mosi_ecr=0, weight_decay=1e-05)
+Use GPU: cuda
+[Info] Number of parameters: 692999
+>>> Start training: MultimodalClassifier_multimodal_dm128_nc7_0_pt_run2_1 >>>
+[Info] Loading train data...
+train 17230
+[Info] train data loaded: 17230 samples
+[Info] Loading val data...
+val 5743
+[Info] val data loaded: 5743 samples
+[Info] Loading test data...
+test 5744
+[Info] test data loaded: 5744 samples
+[Info] Processing batch 0/134
+[Info] Processing batch 10/134
+[Info] Processing batch 20/134
+[Info] Processing batch 30/134
+[Info] Processing batch 40/134
+[Info] Processing batch 50/134
+[Info] Processing batch 60/134
+[Info] Processing batch 70/134
+[Info] Processing batch 80/134
+[Info] Processing batch 90/134
+[Info] Processing batch 100/134
+[Info] Processing batch 110/134
+[Info] Processing batch 120/134
+[Info] Processing batch 130/134
+Epoch: 1, Time: 97.10s | Train Loss: 1.0711286 Vali Loss: 0.8005144 Test Loss: 0.8357534
+Validation loss decreased (inf --> 0.800514).  Saving model ...
+[Info] Processing batch 0/134
+[Info] Processing batch 10/134
+[Info] Processing batch 20/134
+[Info] Processing batch 30/134
+[Info] Processing batch 40/134
+[Info] Processing batch 50/134
+[Info] Processing batch 60/134
+[Info] Processing batch 70/134
+[Info] Processing batch 80/134
+[Info] Processing batch 90/134
+[Info] Processing batch 100/134
+[Info] Processing batch 110/134
+[Info] Processing batch 120/134
+[Info] Processing batch 130/134
+Epoch: 2, Time: 92.55s | Train Loss: 0.7155010 Vali Loss: 0.7763237 Test Loss: 0.8015841
+Validation loss decreased (0.800514 --> 0.776324).  Saving model ...
+[Info] Processing batch 0/134
+[Info] Processing batch 10/134
+[Info] Processing batch 20/134
+[Info] Processing batch 30/134
+[Info] Processing batch 40/134
+[Info] Processing batch 50/134
+[Info] Processing batch 60/134
+[Info] Processing batch 70/134
+[Info] Processing batch 80/134
+[Info] Processing batch 90/134
+[Info] Processing batch 100/134
+[Info] Processing batch 110/134
+[Info] Processing batch 120/134
+[Info] Processing batch 130/134
+Epoch: 3, Time: 91.91s | Train Loss: 0.6674110 Vali Loss: 0.7500852 Test Loss: 0.7740501
+Validation loss decreased (0.776324 --> 0.750085).  Saving model ...
+[Info] Processing batch 0/134
+[Info] Processing batch 10/134
+[Info] Processing batch 20/134
+[Info] Processing batch 30/134
+[Info] Processing batch 40/134
+[Info] Processing batch 50/134
+[Info] Processing batch 60/134
+[Info] Processing batch 70/134
+[Info] Processing batch 80/134
+[Info] Processing batch 90/134
+[Info] Processing batch 100/134
+[Info] Processing batch 110/134
+[Info] Processing batch 120/134
+[Info] Processing batch 130/134
+Epoch: 4, Time: 94.58s | Train Loss: 0.6424234 Vali Loss: 0.7469149 Test Loss: 0.7807268
+Validation loss decreased (0.750085 --> 0.746915).  Saving model ...
+[Info] Processing batch 0/134
+[Info] Processing batch 10/134
+[Info] Processing batch 20/134
+[Info] Processing batch 30/134
+[Info] Processing batch 40/134
+[Info] Processing batch 50/134
+[Info] Processing batch 60/134
+[Info] Processing batch 70/134
+[Info] Processing batch 80/134
+[Info] Processing batch 90/134
+[Info] Processing batch 100/134
+[Info] Processing batch 110/134
+[Info] Processing batch 120/134
+[Info] Processing batch 130/134
+Epoch: 5, Time: 94.00s | Train Loss: 0.6259302 Vali Loss: 0.7287859 Test Loss: 0.7523073
+Validation loss decreased (0.746915 --> 0.728786).  Saving model ...
+[Info] Processing batch 0/134
+[Info] Processing batch 10/134
+[Info] Processing batch 20/134
+[Info] Processing batch 30/134
+[Info] Processing batch 40/134
+[Info] Processing batch 50/134
+[Info] Processing batch 60/134
+[Info] Processing batch 70/134
+[Info] Processing batch 80/134
+[Info] Processing batch 90/134
+[Info] Processing batch 100/134
+[Info] Processing batch 110/134
+[Info] Processing batch 120/134
+[Info] Processing batch 130/134
+Epoch: 6, Time: 93.87s | Train Loss: 0.6124514 Vali Loss: 0.7292047 Test Loss: 0.7567639
+EarlyStopping counter: 1 out of 3
+[Info] Processing batch 0/134
+[Info] Processing batch 10/134
+[Info] Processing batch 20/134
+[Info] Processing batch 30/134
+[Info] Processing batch 40/134
+[Info] Processing batch 50/134
+[Info] Processing batch 60/134
+[Info] Processing batch 70/134
+[Info] Processing batch 80/134
+[Info] Processing batch 90/134
+[Info] Processing batch 100/134
+[Info] Processing batch 110/134
+[Info] Processing batch 120/134
+[Info] Processing batch 130/134
+Epoch: 7, Time: 94.11s | Train Loss: 0.6018100 Vali Loss: 0.7302409 Test Loss: 0.7578052
+EarlyStopping counter: 2 out of 3
+[Info] Processing batch 0/134
+[Info] Processing batch 10/134
+[Info] Processing batch 20/134
+[Info] Processing batch 30/134
+[Info] Processing batch 40/134
+[Info] Processing batch 50/134
+[Info] Processing batch 60/134
+[Info] Processing batch 70/134
+[Info] Processing batch 80/134
+[Info] Processing batch 90/134
+[Info] Processing batch 100/134
+[Info] Processing batch 110/134
+[Info] Processing batch 120/134
+[Info] Processing batch 130/134
+Epoch: 8, Time: 95.10s | Train Loss: 0.5951411 Vali Loss: 0.7247536 Test Loss: 0.7503586
+Validation loss decreased (0.728786 --> 0.724754).  Saving model ...
+[Info] Processing batch 0/134
+[Info] Processing batch 10/134
+[Info] Processing batch 20/134
+[Info] Processing batch 30/134
+[Info] Processing batch 40/134
+[Info] Processing batch 50/134
+[Info] Processing batch 60/134
+[Info] Processing batch 70/134
+[Info] Processing batch 80/134
+[Info] Processing batch 90/134
+[Info] Processing batch 100/134
+[Info] Processing batch 110/134
+[Info] Processing batch 120/134
+[Info] Processing batch 130/134
+Epoch: 9, Time: 94.64s | Train Loss: 0.5842567 Vali Loss: 0.7207412 Test Loss: 0.7441983
+Validation loss decreased (0.724754 --> 0.720741).  Saving model ...
+[Info] Processing batch 0/134
+[Info] Processing batch 10/134
+[Info] Processing batch 20/134
+[Info] Processing batch 30/134
+[Info] Processing batch 40/134
+[Info] Processing batch 50/134
+[Info] Processing batch 60/134
+[Info] Processing batch 70/134
+[Info] Processing batch 80/134
+[Info] Processing batch 90/134
+[Info] Processing batch 100/134
+[Info] Processing batch 110/134
+[Info] Processing batch 120/134
+[Info] Processing batch 130/134
+Epoch: 10, Time: 94.40s | Train Loss: 0.5749116 Vali Loss: 0.7191522 Test Loss: 0.7442380
+Validation loss decreased (0.720741 --> 0.719152).  Saving model ...
+>>> Testing: MultimodalClassifier_multimodal_dm128_nc7_0_pt_run2_1 <<<
+[Info] Loading test data...
+test 5744
+[Info] test data loaded: 5744 samples
+Accuracy: 0.7296
+F1 Score (Macro): 0.7179
+F1 Score (Weighted): 0.7265
+
+Classification Report:
+              precision    recall  f1-score   support
+
+         0.0     0.7143    0.8333    0.7692      1128
+         1.0     0.5703    0.4423    0.4982       633
+         2.0     0.8112    0.6988    0.7508       498
+         3.0     0.8086    0.8154    0.8120       715
+         4.0     0.6672    0.7171    0.6912      1216
+         5.0     0.8187    0.8024    0.8105      1002
+         6.0     0.7309    0.6594    0.6933       552
+
+    accuracy                         0.7296      5744
+   macro avg     0.7316    0.7098    0.7179      5744
+weighted avg     0.7284    0.7296    0.7265      5744
+
+
+Confusion Matrix:
+[[940  73   5   4  46  34  26]
+ [181 280   4  18 102  20  28]
+ [ 24   5 348   2  49  39  31]
+ [  5  27   2 583  79  12   7]
+ [ 73  75  19  80 872  62  35]
+ [ 61   7  23   9  91 804   7]
+ [ 32  24  28  25  68  11 364]]
+
+

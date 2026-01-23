@@ -52,7 +52,7 @@ coverage.xml
 *.pot
 
 # Django stuff:
-*.log
+# *.log
 local_settings.py
 db.sqlite3
 
@@ -128,7 +128,7 @@ checkpoints/
 dataset/Raw/
 *.pkl
 *.mp4
-*.log
+# *.log
 feature.*
 CHERMA202307*
 compressed_da*

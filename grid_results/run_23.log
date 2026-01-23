@@ -1,0 +1,78 @@
+Args: Namespace(batch_size=64, d_model=128, data_format='pkl', disable_epc=0, dropout=0.1, dynamic_hypergraph=1, ecr_target_kappa=0.0001, ecr_warmup_epochs=10, exclude_oob=1, feature_dim_audio=768, feature_dim_text=768, feature_dim_video=512, hyper_heads=1, hyper_multi_head_attention=0, hyper_num_audio=30, hyper_num_text=20, hyper_num_video=10, hyper_update_freq=5, is_training=1, itr=1, k=3, kappa=0.0001, label_map=7, learning_rate=0.01, loss_lambda=0.1, loss_mode='pos_weight', num_classes=7, num_ordinal_levels=7, num_workers=8, patience=3, pkl_path='./preprocess/mosi_all_feat.pkl', root_path='./datasets', seq_len_audio=500, seq_len_text=44, seq_len_video=32, task_mode='ordinal', train_epochs=10, use_coral=0, use_gpu=True, use_mosi_ecr=1)
+Use GPU: cuda
+[Info] Number of parameters: 414982
+[Info] Dataset: MOSI
+[Info] Format: pkl
+[Info] Task mode: ordinal
+[Info] Label encoding: ordinal (6 thresholds)
+[Info] Loss: pos_weight
+[Info] Eval metrics: MAE / Corr / ACC7(report only)
+[Info] CORAL enabled: False
+[Info] MOSI ECR warm-up enabled: True
+>>> Start training: MultimodalClassifier_multimodal_dm128_nc7_0 >>>
+[Info] Loading train data...
+train 1284
+[Info] train data loaded: 1284 samples
+[Info] Loading val data...
+val 229
+[Info] val data loaded: 229 samples
+[Info] Loading test data...
+test 686
+[Info] test data loaded: 686 samples
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 1.4650 | Corr: 0.0340
+[Info] Vali MAE: 1.8280 | Corr: 0.0096
+Epoch: 1, Time: 9.36s | Train Loss: 1.7327991 Vali Loss: 0.6700327 Test Loss: 0.9316463 | Train MAE: 1.3924 Corr: 0.0066
+Validation loss decreased (inf --> 0.670033).  Saving model ...
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 1.4149 | Corr: 0.0215
+[Info] Vali MAE: 1.6603 | Corr: 0.0046
+Epoch: 2, Time: 7.07s | Train Loss: 0.5622468 Vali Loss: 0.5604374 Test Loss: 0.6522434 | Train MAE: 1.3026 Corr: 0.0199
+Validation loss decreased (0.670033 --> 0.560437).  Saving model ...
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 1.2614 | Corr: 0.0342
+[Info] Vali MAE: 1.4581 | Corr: 0.0241
+Epoch: 3, Time: 7.07s | Train Loss: 0.4963410 Vali Loss: 0.5006642 Test Loss: 0.5488591 | Train MAE: 1.2793 Corr: 0.0241
+Validation loss decreased (0.560437 --> 0.500664).  Saving model ...
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 1.1931 | Corr: 0.0388
+[Info] Vali MAE: 1.3286 | Corr: 0.0315
+Epoch: 4, Time: 7.07s | Train Loss: 0.4656742 Vali Loss: 0.4663216 Test Loss: 0.4964856 | Train MAE: 1.1744 Corr: 0.0349
+Validation loss decreased (0.500664 --> 0.466322).  Saving model ...
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 1.2412 | Corr: 0.0375
+[Info] Vali MAE: 1.3591 | Corr: 0.0299
+Epoch: 5, Time: 7.11s | Train Loss: 0.4601711 Vali Loss: 0.4892767 Test Loss: 0.5181207 | Train MAE: 1.1696 Corr: 0.0365
+EarlyStopping counter: 1 out of 3
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 1.3964 | Corr: 0.0348
+[Info] Vali MAE: 1.3085 | Corr: 0.0280
+Epoch: 6, Time: 7.11s | Train Loss: 0.4381867 Vali Loss: 0.8334700 Test Loss: 0.8417296 | Train MAE: 1.0792 Corr: 0.0426
+EarlyStopping counter: 2 out of 3
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 1.3199 | Corr: 0.0304
+[Info] Vali MAE: 1.5393 | Corr: 0.0231
+Epoch: 7, Time: 7.07s | Train Loss: 0.8164843 Vali Loss: 0.5142412 Test Loss: 0.5581408 | Train MAE: 1.4420 Corr: 0.0253
+EarlyStopping counter: 3 out of 3
+Early stopping
+>>> Testing: MultimodalClassifier_multimodal_dm128_nc7_0 <<<
+[Info] Loading test data...
+test 686
+[Info] test data loaded: 686 samples
+MAE: 1.3517
+Corr: 0.0975
+ACC7 (report only): 0.2128
+
+
+/workspace/Ada-MSHyper/utils/metrics.py:34: RuntimeWarning: divide by zero encountered in divide
+  return np.mean(np.abs((pred - true) / true))
+/workspace/Ada-MSHyper/utils/metrics.py:38: RuntimeWarning: divide by zero encountered in divide
+  return np.mean(np.square((pred - true) / true))
+

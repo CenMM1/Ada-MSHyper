@@ -1,0 +1,96 @@
+Args: Namespace(batch_size=64, d_model=128, data_format='pkl', disable_epc=0, dropout=0.1, dynamic_hypergraph=1, ecr_target_kappa=0.0001, ecr_warmup_epochs=10, exclude_oob=1, feature_dim_audio=768, feature_dim_text=768, feature_dim_video=512, hyper_heads=1, hyper_multi_head_attention=0, hyper_num_audio=50, hyper_num_text=20, hyper_num_video=10, hyper_update_freq=5, is_training=1, itr=1, k=3, kappa=0.0001, label_map=7, learning_rate=0.001, loss_lambda=0.1, loss_mode='pos_weight', num_classes=7, num_ordinal_levels=7, num_workers=8, patience=3, pkl_path='./preprocess/mosi_all_feat.pkl', root_path='./datasets', seq_len_audio=500, seq_len_text=44, seq_len_video=32, task_mode='ordinal', train_epochs=10, use_coral=0, use_gpu=True, use_mosi_ecr=1)
+Use GPU: cuda
+[Info] Number of parameters: 417542
+[Info] Dataset: MOSI
+[Info] Format: pkl
+[Info] Task mode: ordinal
+[Info] Label encoding: ordinal (6 thresholds)
+[Info] Loss: pos_weight
+[Info] Eval metrics: MAE / Corr / ACC7(report only)
+[Info] CORAL enabled: False
+[Info] MOSI ECR warm-up enabled: True
+>>> Start training: MultimodalClassifier_multimodal_dm128_nc7_0 >>>
+[Info] Loading train data...
+train 1284
+[Info] train data loaded: 1284 samples
+[Info] Loading val data...
+val 229
+[Info] val data loaded: 229 samples
+[Info] Loading test data...
+test 686
+[Info] test data loaded: 686 samples
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 1.3595 | Corr: 0.0274
+[Info] Vali MAE: 1.4669 | Corr: 0.0124
+Epoch: 1, Time: 9.23s | Train Loss: 0.5236498 Vali Loss: 0.5200965 Test Loss: 0.5432990 | Train MAE: 1.3397 Corr: 0.0161
+Validation loss decreased (inf --> 0.520097).  Saving model ...
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 1.1679 | Corr: 0.0398
+[Info] Vali MAE: 1.1988 | Corr: 0.0338
+Epoch: 2, Time: 7.35s | Train Loss: 0.4584585 Vali Loss: 0.4729660 Test Loss: 0.4836059 | Train MAE: 1.1976 Corr: 0.0333
+Validation loss decreased (0.520097 --> 0.472966).  Saving model ...
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 1.0401 | Corr: 0.0488
+[Info] Vali MAE: 1.0829 | Corr: 0.0412
+Epoch: 3, Time: 7.17s | Train Loss: 0.3765670 Vali Loss: 0.4303595 Test Loss: 0.4499086 | Train MAE: 0.9496 Corr: 0.0482
+Validation loss decreased (0.472966 --> 0.430359).  Saving model ...
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 1.0005 | Corr: 0.0492
+[Info] Vali MAE: 1.0099 | Corr: 0.0408
+Epoch: 4, Time: 7.11s | Train Loss: 0.3422281 Vali Loss: 0.4138607 Test Loss: 0.4144619 | Train MAE: 0.8659 Corr: 0.0510
+Validation loss decreased (0.430359 --> 0.413861).  Saving model ...
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 1.0393 | Corr: 0.0487
+[Info] Vali MAE: 1.1162 | Corr: 0.0429
+Epoch: 5, Time: 6.94s | Train Loss: 0.3174596 Vali Loss: 0.4132620 Test Loss: 0.4432969 | Train MAE: 0.8015 Corr: 0.0535
+Validation loss decreased (0.413861 --> 0.413262).  Saving model ...
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 0.9665 | Corr: 0.0508
+[Info] Vali MAE: 1.0049 | Corr: 0.0422
+Epoch: 6, Time: 6.98s | Train Loss: 0.3138247 Vali Loss: 0.3850938 Test Loss: 0.3986017 | Train MAE: 0.7920 Corr: 0.0539
+Validation loss decreased (0.413262 --> 0.385094).  Saving model ...
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 0.9761 | Corr: 0.0493
+[Info] Vali MAE: 1.0492 | Corr: 0.0427
+Epoch: 7, Time: 7.10s | Train Loss: 0.2889154 Vali Loss: 0.3827916 Test Loss: 0.4249151 | Train MAE: 0.7405 Corr: 0.0541
+Validation loss decreased (0.385094 --> 0.382792).  Saving model ...
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 0.9873 | Corr: 0.0487
+[Info] Vali MAE: 0.9624 | Corr: 0.0426
+Epoch: 8, Time: 7.21s | Train Loss: 0.2834781 Vali Loss: 0.4027260 Test Loss: 0.3991990 | Train MAE: 0.7307 Corr: 0.0551
+EarlyStopping counter: 1 out of 3
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 1.0092 | Corr: 0.0455
+[Info] Vali MAE: 0.9494 | Corr: 0.0425
+Epoch: 9, Time: 7.05s | Train Loss: 0.2662372 Vali Loss: 0.4155979 Test Loss: 0.3954818 | Train MAE: 0.6965 Corr: 0.0546
+EarlyStopping counter: 2 out of 3
+[Info] Processing batch 0/20
+[Info] Processing batch 10/20
+[Info] Vali MAE: 0.9925 | Corr: 0.0497
+[Info] Vali MAE: 1.0189 | Corr: 0.0429
+Epoch: 10, Time: 7.09s | Train Loss: 0.2575532 Vali Loss: 0.4035484 Test Loss: 0.4381611 | Train MAE: 0.6648 Corr: 0.0551
+EarlyStopping counter: 3 out of 3
+Early stopping
+>>> Testing: MultimodalClassifier_multimodal_dm128_nc7_0 <<<
+[Info] Loading test data...
+test 686
+[Info] test data loaded: 686 samples
+MAE: 1.1091
+Corr: 0.1453
+ACC7 (report only): 0.2886
+
+
+/workspace/Ada-MSHyper/utils/metrics.py:34: RuntimeWarning: divide by zero encountered in divide
+  return np.mean(np.abs((pred - true) / true))
+/workspace/Ada-MSHyper/utils/metrics.py:38: RuntimeWarning: divide by zero encountered in divide
+  return np.mean(np.square((pred - true) / true))
+

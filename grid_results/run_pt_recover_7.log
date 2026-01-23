@@ -1,0 +1,36 @@
+Args: Namespace(attn_pooling_dropout=0.1, batch_size=128, d_model=128, data_format='pt', disable_epc=0, dropout=0.1, dynamic_hypergraph=1, ecr_target_kappa=0.0001, ecr_warmup_epochs=10, exclude_oob=1, feature_dim_audio=1024, feature_dim_text=1024, feature_dim_video=2048, hyper_heads=1, hyper_multi_head_attention=0, hyper_num_audio=20, hyper_num_text=50, hyper_num_video=10, hyper_tau=0.5, hyper_topk=4, hyper_update_freq=5, is_training=0, itr=1, k=3, kappa=0.1, label_map=7, learning_rate=0.0001, loss_lambda=0.1, loss_mode='bce', num_classes=7, num_ordinal_levels=7, num_workers=8, patience=3, pkl_path='./preprocess/mosi_compact_with_vision.pkl', reg_huber_delta=1.0, reg_loss_type='mae', reg_loss_weight=0.05, root_path='./preprocess/processed_data', seq_len_audio=518, seq_len_text=160, seq_len_video=16, setting_suffix='pt_run7', task_mode='classification', train_epochs=10, use_attn_pooling=0, use_coral=0, use_gpu=True, use_head_ln=0, use_modal_gate=0, use_mosi_ecr=0, weight_decay=1e-05)
+Use GPU: cuda
+[Info] Number of parameters: 695559
+[Info] Loading test data...
+test 5744
+[Info] test data loaded: 5744 samples
+Accuracy: 0.7228
+F1 Score (Macro): 0.7097
+F1 Score (Weighted): 0.7193
+
+Classification Report:
+              precision    recall  f1-score   support
+
+         0.0     0.7276    0.8121    0.7675      1128
+         1.0     0.5639    0.4250    0.4847       633
+         2.0     0.8304    0.6687    0.7408       498
+         3.0     0.8017    0.8028    0.8022       715
+         4.0     0.6414    0.7459    0.6897      1216
+         5.0     0.7916    0.8074    0.7994      1002
+         6.0     0.7560    0.6232    0.6832       552
+
+    accuracy                         0.7228      5744
+   macro avg     0.7304    0.6979    0.7097      5744
+weighted avg     0.7233    0.7228    0.7193      5744
+
+
+Confusion Matrix:
+[[916  76   4   3  66  42  21]
+ [168 269   2  24 126  24  20]
+ [ 26   4 333   6  51  51  27]
+ [  5  24   1 574  91  13   7]
+ [ 54  65  15  77 907  68  30]
+ [ 58   7  17   7  98 809   6]
+ [ 32  32  29  25  75  15 344]]
+
+

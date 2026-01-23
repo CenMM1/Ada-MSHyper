@@ -1,0 +1,36 @@
+Args: Namespace(attn_pooling_dropout=0.1, batch_size=128, d_model=128, data_format='pt', disable_epc=0, dropout=0.1, dynamic_hypergraph=1, ecr_target_kappa=0.0001, ecr_warmup_epochs=10, exclude_oob=1, feature_dim_audio=1024, feature_dim_text=1024, feature_dim_video=2048, hyper_heads=1, hyper_multi_head_attention=0, hyper_num_audio=20, hyper_num_text=50, hyper_num_video=10, hyper_tau=0.5, hyper_topk=3, hyper_update_freq=5, is_training=0, itr=1, k=4, kappa=0.1, label_map=7, learning_rate=0.0001, loss_lambda=0.1, loss_mode='bce', num_classes=7, num_ordinal_levels=7, num_workers=8, patience=3, pkl_path='./preprocess/mosi_compact_with_vision.pkl', reg_huber_delta=1.0, reg_loss_type='mae', reg_loss_weight=0.05, root_path='./preprocess/processed_data', seq_len_audio=518, seq_len_text=160, seq_len_video=16, setting_suffix='pt_run3', task_mode='classification', train_epochs=10, use_attn_pooling=0, use_coral=0, use_gpu=True, use_head_ln=0, use_modal_gate=0, use_mosi_ecr=0, weight_decay=1e-05)
+Use GPU: cuda
+[Info] Number of parameters: 695559
+[Info] Loading test data...
+test 5744
+[Info] test data loaded: 5744 samples
+Accuracy: 0.7265
+F1 Score (Macro): 0.7136
+F1 Score (Weighted): 0.7237
+
+Classification Report:
+              precision    recall  f1-score   support
+
+         0.0     0.7709    0.7846    0.7777      1128
+         1.0     0.5520    0.4613    0.5026       633
+         2.0     0.8249    0.6526    0.7287       498
+         3.0     0.7908    0.8196    0.8049       715
+         4.0     0.6654    0.7048    0.6845      1216
+         5.0     0.7715    0.8523    0.8099      1002
+         6.0     0.6965    0.6775    0.6869       552
+
+    accuracy                         0.7265      5744
+   macro avg     0.7246    0.7075    0.7136      5744
+weighted avg     0.7245    0.7265    0.7237      5744
+
+
+Confusion Matrix:
+[[885  95   6   3  60  56  23]
+ [144 292   2  28 115  27  25]
+ [ 19   4 325   5  48  49  48]
+ [  3  24   0 586  82  11   9]
+ [ 39  74  16  90 857  95  45]
+ [ 34   9  20   6  66 854  13]
+ [ 24  31  25  23  60  15 374]]
+
+
