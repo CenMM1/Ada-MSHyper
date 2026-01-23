@@ -135,14 +135,14 @@ compressed_da*
 figures/*
 preprocess/mosei/*
 preprocess/mosi/*
-preprocess/cherma/*
+preprocess/CHERMA0723/*
 datasets/*
 preprocess/dataset/*
 preprocess/processed_data/*
 test_results.txt
 preprocess/mos*
 hypergraph_*
-grid_results/*
+
 
 
 

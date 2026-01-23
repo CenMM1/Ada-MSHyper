@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
 import csv
 
 from torch_geometric.nn import MessagePassing
@@ -123,16 +122,18 @@ class HypergraphConv(MessagePassing):
         if self.bias is not None:
             zeros(self.bias)
 
-    def message(self, x_j, edge_index_i, norm, alpha):
+    def message(self, x_j, edge_index_i, norm, alpha, edge_weight):
         if norm is not None:
             out = norm[edge_index_i].view(-1, 1, 1) * x_j
         else:
             out = x_j
+        if edge_weight is not None:
+            out = edge_weight.view(-1, 1, 1) * out
         if alpha is not None:
             out = alpha.unsqueeze(-1) * out
         return out
 
-    def node2edge(self, hyperedge_index, x_node, norm_node=None, alpha=None):
+    def node2edge(self, hyperedge_index, x_node, norm_node=None, alpha=None, edge_weight=None):
         """
         节点到超边的传播：提取超边特征
         hyperedge_index: [2, num_conn], row=node_id, col=edge_id
@@ -147,14 +148,20 @@ class HypergraphConv(MessagePassing):
         self.flow = 'source_to_target'
 
         # 使用propagate进行节点到超边的聚合
-        x_edge = self.propagate(hyperedge_index, x=x_node, norm=norm_node, alpha=alpha)
+        x_edge = self.propagate(
+            hyperedge_index,
+            x=x_node,
+            norm=norm_node,
+            alpha=alpha,
+            edge_weight=edge_weight,
+        )
 
         # 转置回 [B, M, d] 格式
         x_edge = x_edge.transpose(0, 1)  # [B, M, d]
 
         return x_edge
 
-    def edge2node(self, hyperedge_index, x_edge, norm_edge=None, alpha=None):
+    def edge2node(self, hyperedge_index, x_edge, norm_edge=None, alpha=None, edge_weight=None):
         """
         超边到节点的传播：更新节点特征
         hyperedge_index: [2, num_conn], row=node_id, col=edge_id
@@ -170,18 +177,25 @@ class HypergraphConv(MessagePassing):
         self.flow = 'target_to_source'
 
         # 使用propagate进行超边到节点的聚合
-        x_node_updated = self.propagate(hyperedge_index, x=x_edge, norm=norm_edge, alpha=alpha)
+        x_node_updated = self.propagate(
+            hyperedge_index,
+            x=x_edge,
+            norm=norm_edge,
+            alpha=alpha,
+            edge_weight=edge_weight,
+        )
 
         # 转置回 [B, N, d] 格式
         x_node_updated = x_node_updated.transpose(0, 1)  # [B, N, d]
 
         return x_node_updated
 
-    def forward(self, x, hyperedge_index):
+    def forward(self, x, hyperedge_index, edge_weight=None):
         """
         向后兼容的完整双向传播接口
         x: [B, N, in_channels] 原始节点特征
         hyperedge_index: [2, num_conn]
+        edge_weight: [num_conn]，用于稀疏加权边的强度
         return: x_updated: [B, N, out_channels], constrain_loss: 标量
         """
         if x.dim() != 3:
@@ -192,16 +206,22 @@ class HypergraphConv(MessagePassing):
         # 1) 先对节点特征做线性投影
         x_proj = torch.matmul(x, self.weight)  # [B, N, out_channels]
 
-        # 2) 计算节点度和超边度
+        # 2) 计算节点度和超边度（加权度）
         node_index = hyperedge_index[0]  # [E]
         edge_index = hyperedge_index[1]  # [E]
         num_edges = edge_index.max().item() + 1
 
         # D_N: node degrees. 论文的 Edge->Node 归一化使用 D_N^{-1}
-        D = degree(node_index, num_nodes=num_nodes, dtype=x.dtype)  # [N]
+        if edge_weight is None:
+            D = degree(node_index, num_nodes=num_nodes, dtype=x.dtype)  # [N]
+        else:
+            D = scatter(edge_weight, node_index, dim=0, dim_size=num_nodes, reduce='sum')  # [N]
         D_inv = 1.0 / D
         D_inv[D_inv == float("inf")] = 0
-        edge_deg = degree(edge_index, num_nodes=num_edges, dtype=x.dtype)  # [M]
+        if edge_weight is None:
+            edge_deg = degree(edge_index, num_nodes=num_edges, dtype=x.dtype)  # [M]
+        else:
+            edge_deg = scatter(edge_weight, edge_index, dim=0, dim_size=num_edges, reduce='sum')  # [M]
         B_norm = 1.0 / edge_deg
         B_norm[B_norm == float("inf")] = 0
 
@@ -283,12 +303,14 @@ class HypergraphConv(MessagePassing):
             x_node=x_proj,          # 已投影的节点特征
             norm_node=B_norm,      # 超边侧的归一化
             alpha=alpha,
+            edge_weight=edge_weight,
         )
         x_updated = self.edge2node(
             hyperedge_index=hyperedge_index,
             x_edge=x_edge,
             norm_edge=D_inv,        # 节点侧的归一化（D_N^{-1}）
             alpha=alpha,
+            edge_weight=edge_weight,
         )
 
         constrain_losstotal = torch.tensor(0.0, device=x.device, dtype=x.dtype)
@@ -299,127 +321,103 @@ class HypergraphConv(MessagePassing):
 
 
 class MaskedAdaptiveHypergraphGenerator(nn.Module):
-    """基于掩码的自适应超图生成器，支持动态结构学习"""
+    """
+    纯 Masking 流派：全序列构图，通过 Mask 屏蔽 Padding 节点。
+    彻底移除 effective_len 截断逻辑，解决索引越界问题。
+    """
     def __init__(self, modality, configs):
         super().__init__()
         self.modality = modality
-
-        # 根据模态确定序列长度
-        self.seq_len = getattr(configs, f'seq_len_{modality}', getattr(configs, 'seq_len', 100))
-
+        
+        # 配置中的最大长度（仅用于初始化 Embedding 的最大容量）
+        # 即使 batch 数据只有 40，这里保留 100 也没关系，切片取前 40 即可
+        self.max_seq_len = getattr(configs, f'seq_len_{modality}', getattr(configs, 'seq_len', 100))
+        
         self.dim = configs.d_model
-        self.hyper_num = getattr(configs, f'hyper_num_{modality}', 50)  # 模态特定的超边数
-        self.alpha = 1.0
+        self.hyper_num = getattr(configs, f'hyper_num_{modality}', 50)
+        self.alpha = getattr(configs, 'hyper_tau', 1.0)
         self.k = getattr(configs, 'k', 3)
+        self.topk = getattr(configs, 'hyper_topk', self.k)
 
-        # 模态特定阈值，避免超图过密导致CUDA错误
         self.threshold = {'text': 0.001, 'audio': 0.1, 'video': 0.001}.get(self.modality, 0.1)
 
-        # 仅启用动态超图结构学习
-        self.dynamic = True
-
-        # 模态特定的可学习嵌入参数（用于动态结构学习）
-        self.node_embeds = nn.Parameter(torch.randn(self.seq_len, self.dim))  # 可学习节点嵌入
-        self.hyper_embeds = nn.Parameter(torch.randn(self.hyper_num, self.dim))  # 可学习超边嵌入
+        # 可学习嵌入 (预留足够大的空间)
+        self.node_embeds = nn.Parameter(torch.randn(self.max_seq_len, self.dim))
+        self.hyper_embeds = nn.Parameter(torch.randn(self.hyper_num, self.dim))
 
         self.dropout = nn.Dropout(p=0.1)
-
-        # 缓存上次的超图（用于减少重计算）
         self.cached_hypergraph = None
+        self.cached_seq_len = -1  # 记录缓存时的序列长度
 
     def forward(self, features, mask, update_hyper=True):
-        """生成动态超图结构，基于可学习嵌入和反馈驱动适应
-        features: [batch_size, seq_len, feature_dim]
-        mask: [batch_size, seq_len]
-        update_hyper: 是否更新超图结构（减少计算开销）
-        注意：实际序列长度 seq_len 可能与配置的 self.seq_len 不一致，这里统一采用
-        effective_len = min(self.seq_len, seq_len)，以避免索引越界。
         """
-        if not update_hyper and self.cached_hypergraph is not None:
-            # 使用缓存的超图
-            return [self.cached_hypergraph] * len(features) if isinstance(features, list) else [self.cached_hypergraph] * features.shape[0]
+        features: [batch_size, current_seq_len, feature_dim]
+        mask: [batch_size, current_seq_len] (1=valid, 0=padding)
+        """
         batch_size, seq_len, feature_dim = features.shape
 
-        # 有效长度：不超过真实序列长度，避免后续超图节点索引越界
-        effective_len = min(self.seq_len, seq_len)
+        # ==================== 1. 缓存检查逻辑 ====================
+        # 只有当 (不需更新) 且 (缓存存在) 且 (缓存的长度 == 当前序列长度) 时，才复用
+        # 这完美解决了 batch 间长度不一致导致的越界问题
+        if (not update_hyper) and (self.cached_hypergraph is not None) and (self.cached_seq_len == seq_len):
+            cached_index, cached_weight = self.cached_hypergraph
+            return [(cached_index, cached_weight.detach())] * batch_size
 
-        # 使用可学习嵌入（仅前 effective_len 个位置参与构图）
-        node_embeddings = self.node_embeds[:effective_len]  # [effective_len, dim]
-        hyperedge_embeddings = self.hyper_embeds  # [hyper_num, dim]
+        # ==================== 2. 动态构图逻辑 ====================
+        
+        # 动态切片：根据当前 batch 的实际长度 seq_len 取嵌入
+        # 假设 node_embeds 够长；如果不够(极其罕见)，则取 min
+        slice_len = min(seq_len, self.node_embeds.size(0))
+        node_embeddings = self.node_embeds[:slice_len]  # [seq_len, dim]
+        
+        # 如果当前序列比预设的 max_seq_len 还长（防御性编程），需要扩展 features 对应的维度
+        # 但通常 seq_len <= max_seq_len。这里直接用 node_embeddings 计算
+        
+        hyperedge_embeddings = self.hyper_embeds # [hyper_num, dim]
 
-        # 计算基础相似度（动态重计算）
-        similarity = torch.mm(node_embeddings, hyperedge_embeddings.transpose(0, 1))  # [effective_len, hyper_num]
-        original_similarity = similarity.clone()
-
+        # 计算相似度 [seq_len, hyper_num]
+        similarity = torch.mm(node_embeddings, hyperedge_embeddings.transpose(0, 1))
+        
         # 应用温度系数
-        similarity = F.relu(self.alpha * similarity)
+        similarity = F.relu(self.alpha * similarity) # [seq_len, hyper_num]
 
-        # 基于掩码调整相似度（仅使用前 effective_len 个时间步）
-        avg_mask = mask.mean(dim=0)  # [seq_len]
-        mask_penalty = avg_mask[:effective_len]  # [effective_len]
+        # ==================== 3. 核心 Masking ====================
+        # mask: [batch_size, seq_len] -> 取平均或首个样本的 mask (假设 batch 内长度对齐)
+        # 注意：通常 PyTorch DataLoader 出来的 batch 内 tensor 长度是对齐的（padding 到了该 batch 的 max）。
+        # 我们用 mask 来屏蔽 padding 节点，使其不连接超边。
+        
+        # 获取当前 batch 的有效 mask (取平均以平滑，或者取 min 这种严格策略)
+        # 简单做法：只要该位置大部分样本是 padding，就认为是 padding
+        avg_mask = mask.mean(dim=0)[:slice_len] # [seq_len]
+        
+        # 扩展 mask 维度以匹配 similarity
+        # 对应 mask 为 0 的位置（Padding），我们把相似度设为 -inf
+        # 这样 Softmax 之后权重为 0
+        similarity = similarity.masked_fill(avg_mask.unsqueeze(-1) < 0.5, -1e9)
 
-        similarity = similarity * mask_penalty.unsqueeze(-1)  # [effective_len, hyper_num]
-        masked_similarity = similarity.clone()
-        mask_penalty_values = mask_penalty.clone()
+        # Softmax [seq_len, hyper_num]
+        soft_adj = F.softmax(similarity, dim=1) 
+        
+        # ==================== 4. 稀疏化与输出 ====================
+        k = min(self.topk, self.hyper_num)
+        values, indices = soft_adj.topk(k, dim=1) # [seq_len, k]
 
-        # 应用SoftMax得到软关联矩阵（用于梯度传播）
-        soft_adj = F.softmax(similarity, dim=1)  # [effective_len, hyper_num]
-        softmax_similarity = soft_adj.clone()
+        # 构建 edge_index [2, E]
+        # node_indices: 0, 0, 0, 1, 1, 1 ... (完全匹配当前 seq_len)
+        node_indices = torch.arange(slice_len, device=features.device).unsqueeze(1).expand(-1, k)
+        
+        row = node_indices.reshape(-1)
+        col = indices.reshape(-1)
+        edge_index = torch.stack([row, col], dim=0)
 
-        # 选择top-k超边（稀疏化）
-        mask_adj = torch.zeros_like(soft_adj)
-        s1, t1 = soft_adj.topk(min(self.k, self.hyper_num), 1)
-        mask_adj.scatter_(1, t1, s1.fill_(1))
-        adj = soft_adj * mask_adj
+        # 权重扁平化
+        edge_weight = values.reshape(-1)
 
-        # 二值化（用于消息传递）
-        adj = torch.where(
-            adj > self.threshold,
-            torch.tensor(1.0, device=features.device),
-            torch.tensor(0.0, device=features.device),
-        )
-        binary_similarity = adj.clone()
+        # 更新缓存状态
+        self.cached_hypergraph = (edge_index, edge_weight)
+        self.cached_seq_len = seq_len
 
-        # 只保留有连接的超边
-        valid_hyperedges = (adj != 0).any(dim=0)
-        if valid_hyperedges.any():
-            adj = adj[:, valid_hyperedges]
-
-            # 构建超图：节点列表和超边列表
-            matrix_array = adj.cpu().int()
-            result_list = [
-                torch.nonzero(matrix_array[:, col]).flatten().tolist()
-                for col in range(matrix_array.shape[1])
-            ]
-
-            if result_list and any(len(sublist) > 0 for sublist in result_list):
-                node_list = torch.cat(
-                    [torch.tensor(sublist) for sublist in result_list if len(sublist) > 0]
-                ).tolist()
-                count_list = [
-                    len(torch.nonzero(matrix_array[:, col]).flatten())
-                    for col in range(matrix_array.shape[1])
-                ]
-                hyperedge_list = torch.cat(
-                    [torch.full((count,), idx) for idx, count in enumerate(count_list)]
-                ).tolist()
-            else:
-                node_list = [0]
-                hyperedge_list = [0]
-        else:
-            node_list = [0]
-            hyperedge_list = [0]
-
-        # 构建共享超图
-        hypergraph = np.vstack((node_list, hyperedge_list))
-        hypergraph = torch.tensor(hypergraph, dtype=torch.long)
-
-
-        # 缓存超图
-        self.cached_hypergraph = hypergraph
-
-        # 返回相同的超图给所有批次样本
-        return [hypergraph] * batch_size
+        return [(edge_index, edge_weight)] * batch_size
 
 
 class MultimodalClassifier(nn.Module):
@@ -480,7 +478,32 @@ class MultimodalClassifier(nn.Module):
         self.task_mode = str(getattr(configs, 'task_mode', 'classification'))
         self.use_coral = bool(getattr(configs, 'use_coral', 0))
         self.num_ordinal_levels = int(getattr(configs, 'num_ordinal_levels', 7))
-        output_dim = (self.num_ordinal_levels - 1) if (self.task_mode == 'ordinal') else getattr(configs, 'num_classes', 10)
+        if self.task_mode == 'ordinal':
+            output_dim = self.num_ordinal_levels - 1
+        elif self.task_mode == 'regression':
+            output_dim = 1
+        else:
+            output_dim = getattr(configs, 'num_classes', 10)
+        self.use_head_ln = bool(getattr(configs, 'use_head_ln', 0))
+        self.use_modal_gate = bool(getattr(configs, 'use_modal_gate', 0)) if self.task_mode == 'regression' else False
+        self.use_attn_pooling = bool(getattr(configs, 'use_attn_pooling', 0))
+        self.attn_pooling_dropout = float(getattr(configs, 'attn_pooling_dropout', 0.1))
+        if self.use_attn_pooling:
+            self.attn_pooling_dropout_layer = nn.Dropout(self.attn_pooling_dropout)
+            self.attn_queries_node = nn.ParameterList([
+                nn.Parameter(torch.randn(configs.d_model)) for _ in self.modalities
+            ])
+            self.attn_queries_edge = nn.ParameterList([
+                nn.Parameter(torch.randn(configs.d_model)) for _ in self.modalities
+            ])
+        if self.use_head_ln:
+            self.head_ln = nn.LayerNorm(6 * configs.d_model)
+        if self.use_modal_gate:
+            self.modal_gate = nn.Sequential(
+                nn.Linear(2 * configs.d_model, configs.d_model),
+                nn.ReLU(),
+                nn.Linear(configs.d_model, 1)
+            )
         self.classifier = nn.Linear(6 * configs.d_model, output_dim)
 
         # CORAL learnable thresholds (K-1), monotonic via positive deltas
@@ -494,6 +517,25 @@ class MultimodalClassifier(nn.Module):
             init_deltas = torch.diff(init_thresholds, prepend=init_thresholds[:1])
             self.coral_deltas = nn.Parameter(init_deltas)
             self.coral_base = nn.Parameter(init_thresholds[:1].clone())
+
+    def _attn_pool(self, seq, mask, query):
+        """单头可学习 query attention pooling.
+        seq: [B, L, D], mask: [B, L] (1=valid, 0=pad) or None, query: [D]
+        """
+        scores = torch.matmul(seq, query) / math.sqrt(seq.size(-1))  # [B, L]
+        if mask is not None:
+            mask_bool = mask > 0
+            scores = scores.masked_fill(~mask_bool, -1e9)
+        weights = F.softmax(scores, dim=1)
+        if mask is not None:
+            mask_sum = mask_bool.sum(dim=1, keepdim=True)
+            if (mask_sum == 0).any():
+                uniform = torch.full_like(weights, 1.0 / seq.size(1))
+                weights = torch.where(mask_sum > 0, weights, uniform)
+        if self.use_attn_pooling:
+            weights = self.attn_pooling_dropout_layer(weights)
+        pooled = torch.bmm(weights.unsqueeze(1), seq).squeeze(1)  # [B, D]
+        return pooled
 
     def forward(self, batch_data, x_mark_enc=None):
         """
@@ -519,6 +561,7 @@ class MultimodalClassifier(nn.Module):
         modal_hyper_reprs = []  # 各模态的超边特征
         modal_hypergraphs = []  # 各模态的超图结构
         modal_seq_lens = []
+        modal_masks = []
 
         # 检查是否需要更新超图结构
         self.step_counter += 1
@@ -530,21 +573,26 @@ class MultimodalClassifier(nn.Module):
             ('video', video_features, video_mask),
         ]):
             modal_seq_lens.append(features.shape[1])
+            modal_masks.append(mask)
             # 生成模态内超图（动态模式下按频率更新）
             hypergraphs = self.hyper_generators[i](features, mask, update_hyper=update_hyper)
-            hypergraph = hypergraphs[0].to(features.device)
-            modal_hypergraphs.append(hypergraph)
+            edge_index, edge_weight = hypergraphs[0]
+            edge_index = edge_index.to(features.device)
+            edge_weight = edge_weight.to(features.device)
+            modal_hypergraphs.append((edge_index, edge_weight))
 
             # 使用超图卷积的 forward 完整走一遍 Node -> Edge -> Node，并获得约束损失
             updated_nodes_pre, _ = self.hyper_convs[i](
                 features,
-                hypergraph
+                edge_index,
+                edge_weight=edge_weight,
             )
 
             # 使用更新后的节点特征再次做 Node -> Edge，用于跨模态超边注意力
             hyper_repr = self.hyper_convs[i].node2edge(
-                hyperedge_index=hypergraph,
+                hyperedge_index=edge_index,
                 x_node=updated_nodes_pre,
+                edge_weight=edge_weight,
             )
             modal_hyper_reprs.append(hyper_repr)
 
@@ -563,11 +611,13 @@ class MultimodalClassifier(nn.Module):
         for i, (hypergraph, enhanced_hyper_repr) in enumerate(zip(modal_hypergraphs, enhanced_hyper_reprs)):
             # 获取模态的序列长度
             seq_len_modality = modal_seq_lens[i]
+            edge_index, edge_weight = hypergraph
 
             # Edge -> Node传播：利用跨模态增强后的超边特征更新节点
             updated_node_features = self.hyper_convs[i].edge2node(
-                hyperedge_index=hypergraph.to(enhanced_hyper_repr.device),
-                x_edge=enhanced_hyper_repr  # [B, num_edges, d_model]
+                hyperedge_index=edge_index.to(enhanced_hyper_repr.device),
+                x_edge=enhanced_hyper_repr,  # [B, num_edges, d_model]
+                edge_weight=edge_weight.to(enhanced_hyper_repr.device),
             )  # 输出: [B, seq_len_modality, d_model]
 
             # 确保维度匹配（如果seq_len_modality != 超图节点数，可能需要调整）
@@ -580,15 +630,29 @@ class MultimodalClassifier(nn.Module):
         # 按照HyperGAMER论文的Representation Fusion
         modal_summaries = []
         for i, (hyper_repr, node_output) in enumerate(zip(enhanced_hyper_reprs, modal_outputs)):
-            # 节点池化
-            z_n = node_output.mean(dim=1)  # [batch_size, d_model]
-            # 超边池化
-            z_e = hyper_repr.mean(dim=1)   # [batch_size, d_model]
+            # 节点池化（attention pooling or mean pooling）
+            if self.use_attn_pooling:
+                z_n = self._attn_pool(node_output, modal_masks[i], self.attn_queries_node[i])
+                z_e = self._attn_pool(hyper_repr, None, self.attn_queries_edge[i])
+            else:
+                z_n = node_output.mean(dim=1)  # [batch_size, d_model]
+                z_e = hyper_repr.mean(dim=1)   # [batch_size, d_model]
             # 模态表示拼接
             Z_m = torch.cat([z_n, z_e], dim=1)  # [batch_size, 2 * d_model]
             modal_summaries.append(Z_m)
         # 多模态融合
-        Z_fusion = torch.cat(modal_summaries, dim=1)  # [batch_size, 6 * d_model]
+        if self.use_modal_gate:
+            gate_logits = []
+            for Z_m in modal_summaries:
+                gate_logits.append(self.modal_gate(Z_m))  # [B, 1]
+            gate_logits = torch.cat(gate_logits, dim=1)  # [B, 3]
+            gate_weights = F.softmax(gate_logits, dim=1)  # [B, 3]
+            weighted = [Z_m * gate_weights[:, i].unsqueeze(1) for i, Z_m in enumerate(modal_summaries)]
+            Z_fusion = torch.cat(weighted, dim=1)  # [batch_size, 6 * d_model]
+        else:
+            Z_fusion = torch.cat(modal_summaries, dim=1)  # [batch_size, 6 * d_model]
+        if self.use_head_ln:
+            Z_fusion = self.head_ln(Z_fusion)
         # 分类输出
         logits = self.classifier(Z_fusion)  # [batch_size, out_dim]
 
@@ -613,34 +677,39 @@ class MultimodalClassifier(nn.Module):
     def compute_ecr_loss(self, modal_hypergraphs, modal_hyper_reprs, modal_node_outputs):
         """
         计算情感一致性正则化 (ECR) - 向量化优化版本
-        modal_hypergraphs: 各模态超图结构
-        modal_hyper_reprs: 各模态超边表示 [batch_size, num_edges_m, d_model]
-        modal_node_outputs: 各模态节点输出 [batch_size, seq_len_m, d_model]
         """
         total_ecd = 0.0
         total_epc = 0.0
         num_modalities = len(modal_hypergraphs)
 
         for m in range(num_modalities):
-            hypergraph = modal_hypergraphs[m]  # [2, num_conn]
-            hyper_repr = modal_hyper_reprs[m]  # [B, M, D]
-            node_repr = modal_node_outputs[m]  # [B, N, D]
+            # ==================== 修正开始 ====================
+            # 1. 正确解包元组 (edge_index, edge_weight)
+            edge_index, _ = modal_hypergraphs[m] 
+            
+            # 2. 确保索引是 Long 类型 (以防万一)
+            node_idx = edge_index[0].long()
+            edge_idx = edge_index[1].long()
+            # ==================== 修正结束 ====================
+
+            hyper_repr = modal_hyper_reprs[m]   # [B, M, D]
+            node_repr = modal_node_outputs[m]   # [B, N, D]
 
             batch_size, num_nodes, _ = node_repr.shape
             _, num_edges, _ = hyper_repr.shape
 
-            # 构建二值关联矩阵 H [B, N, M] - 扩展到batch维度
+            # 构建二值关联矩阵 H [B, N, M]
             H = torch.zeros(batch_size, num_nodes, num_edges, device=hyper_repr.device)
-            node_idx = hypergraph[0]
-            edge_idx = hypergraph[1]
+            
+            # 这里现在使用正确的 node_idx 和 edge_idx 就不会报错了
             H[:, node_idx, edge_idx] = 1.0  # [B, N, M]
 
             # ECD: 节点-超边距离 - 向量化
-            # 计算所有节点到所有超边的距离 [B, N, M]
             dist_node_hyper = torch.cdist(node_repr, hyper_repr, p=2)  # [B, N, M]
 
             # 只计算关联的距离，mask掉非关联
             masked_dist = dist_node_hyper * H  # [B, N, M]
+            
             # 对每个节点，平均其关联超边的距离
             node_degrees = H.sum(dim=2, keepdim=True)  # [B, N, 1]
             node_degrees = torch.clamp(node_degrees, min=1e-8)  # 避免除零
@@ -660,7 +729,7 @@ class MultimodalClassifier(nn.Module):
                 # 论文中的margin η，假设为4.2
                 eta = 4.2
 
-                # 计算EPC项：α * dist + (1-α) * clamp(η - dist, 0)
+                # 计算EPC项
                 epc_matrix = cos_sim * dist_hyper + (1 - cos_sim) * torch.clamp(eta - dist_hyper, min=0.0)  # [B, M, M]
 
                 # 排除对角线（i==j）
@@ -674,7 +743,12 @@ class MultimodalClassifier(nn.Module):
         # 平均ECD和EPC，λ=0.5
         lambda_ecd = 0.5
         lambda_epc = 0.5
-        ecr_loss = lambda_ecd * (total_ecd / num_modalities) + lambda_epc * (total_epc / num_modalities)
+        
+        # 防止除以0（虽然通常num_modalities=3）
+        if num_modalities > 0:
+            ecr_loss = lambda_ecd * (total_ecd / num_modalities) + lambda_epc * (total_epc / num_modalities)
+        else:
+            ecr_loss = torch.tensor(0.0, device=modal_hyper_reprs[0].device)
 
         return ecr_loss
 

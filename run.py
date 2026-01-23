@@ -75,8 +75,12 @@ parser.add_argument('--loss_lambda', type=float, default=0.1, help='[DEPRECATED]
 # =========================
 #     Task Mode Config
 # =========================
-parser.add_argument('--task_mode', type=str, default='classification', choices=['classification', 'ordinal'],
-                    help='task mode: classification or ordinal regression (MOSI/MOSEI only)')
+parser.add_argument('--task_mode', type=str, default='classification', choices=['classification', 'ordinal', 'regression'],
+                    help='task mode: classification, ordinal regression, or regression (MOSI/MOSEI only)')
+parser.add_argument('--use_head_ln', type=int, default=0, help='use LayerNorm before head (0/1)')
+parser.add_argument('--use_modal_gate', type=int, default=0, help='use modality gate in regression fusion (0/1)')
+parser.add_argument('--use_attn_pooling', type=int, default=0, help='use per-modality attention pooling (0/1)')
+parser.add_argument('--attn_pooling_dropout', type=float, default=0.1, help='dropout for attention pooling weights')
 
 # =========================
 #     Experiment Config
@@ -106,6 +110,9 @@ parser.add_argument('--use_mosi_ecr', type=int, default=0, help='enable MOSI ECR
 parser.add_argument('--ecr_warmup_epochs', type=int, default=10, help='epochs with kappa=0 before warm-up')
 parser.add_argument('--ecr_target_kappa', type=float, default=0.0001, help='target kappa after warm-up')
 parser.add_argument('--disable_epc', type=int, default=0, help='disable EPC term inside ECR')
+parser.add_argument('--weight_decay', type=float, default=0.0001, help='weight decay for optimizer')
+parser.add_argument('--hyper_topk', type=int, default=3, help='top-k for hypergraph construction')
+parser.add_argument('--hyper_tau', type=float, default=1.0, help='temperature for hypergraph construction')
 
 args = parser.parse_args()
 
@@ -140,7 +147,7 @@ else:
 # /opt/miniforge3/bin/conda run -n py385
 # python run.py \
 #   --is_training 1 \
-#   --root_path ./datasets \
+#   --root_path ./preprocess/processed_data \
 #   --data_format pt \
 #   --num_workers 8 \
 #   --num_classes 7 \
@@ -167,4 +174,7 @@ else:
 #   --patience 3 \
 #   --itr 1 \
 #   --kappa 0.1
+#   --weight_decay 1e-5
+#   --hyper_topk 3
+#   --hyper_tau 1.0
 

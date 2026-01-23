@@ -21,10 +21,9 @@ class Exp_Main(Exp_Basic):
         torch.backends.cudnn.benchmark = True
         self.task_mode = str(getattr(args, 'task_mode', 'classification'))
         self.data_format = str(getattr(args, 'data_format', 'pt'))
-        self.reg_weight = 0.0 if self.task_mode == 'ordinal' else 1.0
+        self.reg_weight = 0.0 if self.task_mode in ['ordinal', 'regression'] else 1.0
         self.loss_mode = str(getattr(args, 'loss_mode', 'bce'))
-        self.reg_loss_weight = float(getattr(args, 'reg_loss_weight', 0.05))
-        self.reg_loss_type = str(getattr(args, 'reg_loss_type', 'mae'))
+        self.reg_loss_type = str(getattr(args, 'reg_loss_type', 'huber'))
         self.reg_huber_delta = float(getattr(args, 'reg_huber_delta', 1.0))
         self.use_coral = bool(getattr(args, 'use_coral', 0))
         self.use_mosi_ecr = bool(getattr(args, 'use_mosi_ecr', 0))
@@ -34,15 +33,17 @@ class Exp_Main(Exp_Basic):
         self._log_task_config()
 
     def _log_task_config(self):
-        if self.data_format == 'pkl' and self.task_mode == 'ordinal':
+        if self.data_format == 'pkl' and self.task_mode in ['ordinal', 'regression']:
             print('[Info] Dataset: MOSI')
             print('[Info] Format: pkl')
-            print('[Info] Task mode: ordinal')
-            print('[Info] Label encoding: ordinal (6 thresholds)')
-            print(f'[Info] Loss: {self.loss_mode}')
-            print(f'[Info] Regression penalty: {self.reg_loss_type} (lambda={self.reg_loss_weight})')
+            print(f'[Info] Task mode: {self.task_mode}')
+            if self.task_mode == 'ordinal':
+                print('[Info] Label encoding: ordinal (6 thresholds)')
+                print(f'[Info] Loss: {self.loss_mode}')
+                print(f'[Info] CORAL enabled: {self.use_coral}')
+            else:
+                print(f'[Info] Loss: {self.reg_loss_type}')
             print('[Info] Eval metrics: MAE / Corr / ACC7(report only)')
-            print(f'[Info] CORAL enabled: {self.use_coral}')
             print(f'[Info] MOSI ECR warm-up enabled: {self.use_mosi_ecr}')
 
     def _move_batch_to_device(self, batch_data):
@@ -64,7 +65,10 @@ class Exp_Main(Exp_Basic):
         return data_set, data_loader
 
     def _select_optimizer(self):
-        return optim.Adam(self.model.parameters(), lr=self.args.learning_rate)
+        return optim.AdamW(
+        self.model.parameters(),
+        lr=self.args.learning_rate,
+        weight_decay=getattr(self.args, 'weight_decay', 1e-5))
 
     def _select_criterion(self):
         if self.task_mode == 'ordinal':
@@ -74,6 +78,8 @@ class Exp_Main(Exp_Basic):
                 pos_weight = torch.tensor([1.0, 1.2, 1.4, 1.4, 1.2, 1.0], device=self.device)
                 return nn.BCEWithLogitsLoss(pos_weight=pos_weight)
             return nn.BCEWithLogitsLoss()
+        if self.task_mode == 'regression':
+            return nn.HuberLoss(delta=self.reg_huber_delta)
         return nn.CrossEntropyLoss()
 
     def _ordinal_loss(self, outputs, targets, criterion):
@@ -95,6 +101,11 @@ class Exp_Main(Exp_Basic):
             return F.huber_loss(pred, true, delta=self.reg_huber_delta)
         return F.l1_loss(pred, true)
 
+    def _regression_outputs(self, outputs):
+        if outputs.dim() == 2 and outputs.size(1) == 1:
+            return outputs.squeeze(1)
+        return outputs.view(-1)
+
     def vali(self, vali_data, vali_loader, criterion):
         total_loss = []
         metric_mae = []
@@ -115,6 +126,13 @@ class Exp_Main(Exp_Basic):
                     mae, _, _, _, _, _, corr = metric(pred.detach().cpu().numpy(), true.detach().cpu().numpy())
                     metric_mae.append(mae)
                     metric_corr.append(corr)
+                elif self.task_mode == 'regression':
+                    targets = batch_data['label_reg']
+                    pred = self._regression_outputs(outputs)
+                    loss = criterion(pred, targets)
+                    mae, _, _, _, _, _, corr = metric(pred.detach().cpu().numpy(), targets.detach().cpu().numpy())
+                    metric_mae.append(mae)
+                    metric_corr.append(corr)
                 else:
                     # 使用多模态标签作为目标
                     targets = batch_data['label_multimodal'].long()
@@ -123,7 +141,7 @@ class Exp_Main(Exp_Basic):
                 total_loss.append(loss)
 
         total_loss = torch.stack(total_loss).mean()
-        if self.task_mode == 'ordinal' and metric_mae:
+        if self.task_mode in ['ordinal', 'regression'] and metric_mae:
             mae = float(np.mean(metric_mae))
             corr = float(np.mean(metric_corr))
             print(f'[Info] Vali MAE: {mae:.4f} | Corr: {corr:.4f}')
@@ -150,7 +168,7 @@ class Exp_Main(Exp_Basic):
             train_mae = []
             train_corr = []
 
-            if self.use_mosi_ecr and self.task_mode == 'ordinal':
+            if self.use_mosi_ecr and self.task_mode in ['ordinal', 'regression']:
                 if epoch < self.ecr_warmup_epochs:
                     self.reg_weight = 0.0
                 else:
@@ -173,6 +191,13 @@ class Exp_Main(Exp_Basic):
                     pred = torch.sigmoid(outputs).sum(dim=1) - 3.0
                     true = targets.sum(dim=1) - 3.0
                     mae, _, _, _, _, _, corr = metric(pred.detach().cpu().numpy(), true.detach().cpu().numpy())
+                    train_mae.append(mae)
+                    train_corr.append(corr)
+                elif self.task_mode == 'regression':
+                    targets = batch_data['label_reg']
+                    pred = self._regression_outputs(outputs)
+                    loss = criterion(pred, targets)
+                    mae, _, _, _, _, _, corr = metric(pred.detach().cpu().numpy(), targets.detach().cpu().numpy())
                     train_mae.append(mae)
                     train_corr.append(corr)
                 else:
@@ -215,15 +240,16 @@ class Exp_Main(Exp_Basic):
                             mask = {'text': text_mask, 'audio': audio_mask, 'video': video_mask}[modality]
 
                             hypergraphs = self.model.hyper_generators[i](features, mask)
-                            hypergraph = hypergraphs[0].to(self.device)
-                            num_connections = len(hypergraph[0])
+                            edge_index, edge_weight = hypergraphs[0]
+                            edge_index = edge_index.to(self.device)
+                            num_connections = edge_index.size(1)
                             self.record_hypergraph_connections(epoch, modality, num_connections)
                         except Exception as e:
                             print(f"Warning: Could not record hypergraph for {modality}: {e}")
             except Exception as e:
                 print(f"Warning: Could not record hypergraphs at epoch end: {e}")
 
-            if self.task_mode == 'ordinal' and train_mae:
+            if self.task_mode in ['ordinal', 'regression'] and train_mae:
                 avg_mae = float(np.mean(train_mae))
                 avg_corr = float(np.mean(train_corr))
                 print(
@@ -274,13 +300,18 @@ class Exp_Main(Exp_Basic):
                     true = targets.sum(dim=1) - 3.0
                     all_preds.extend(pred.detach().cpu().numpy())
                     all_labels.extend(true.detach().cpu().numpy())
+                elif self.task_mode == 'regression':
+                    targets = batch_data['label_reg']
+                    pred = self._regression_outputs(outputs)
+                    all_preds.extend(pred.detach().cpu().numpy())
+                    all_labels.extend(targets.detach().cpu().numpy())
                 else:
                     preds = torch.argmax(outputs, dim=1).detach().cpu().numpy()
                     labels = batch_data['label_multimodal'].detach().cpu().numpy()
                     all_preds.extend(preds)
                     all_labels.extend(labels)
 
-            if self.task_mode == 'ordinal':
+            if self.task_mode in ['ordinal', 'regression']:
                 all_preds = np.array(all_preds)
                 all_labels = np.array(all_labels)
                 mae, _, _, _, _, _, corr = metric(all_preds, all_labels)
@@ -293,8 +324,9 @@ class Exp_Main(Exp_Basic):
 
                 with open('test_results.txt', 'a') as f:
                     f.write(f'Setting: {setting}\n')
-                    f.write('Task mode: ordinal\n')
-                    f.write('Label encoding: ordinal (6 thresholds)\n')
+                    f.write(f'Task mode: {self.task_mode}\n')
+                    if self.task_mode == 'ordinal':
+                        f.write('Label encoding: ordinal (6 thresholds)\n')
                     f.write(f'MAE: {mae:.4f}\n')
                     f.write(f'Corr: {corr:.4f}\n')
                     f.write(f'ACC7 (report only): {acc7:.4f}\n')

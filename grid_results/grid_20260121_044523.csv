@@ -1,0 +1,7 @@
+run_id,lr,use_head_ln,hyper_num_text,hyper_num_audio,hyper_num_video,mae,corr,acc7,status
+1,0.001,0,20,30,10,,,,fail(2)
+2,0.001,1,20,30,10,,,,fail(2)
+3,0.0003,0,20,30,10,,,,fail(2)
+4,0.0003,1,20,30,10,,,,fail(2)
+5,0.0001,0,20,30,10,,,,fail(2)
+6,0.0001,1,20,30,10,,,,fail(2)

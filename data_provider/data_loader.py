@@ -231,7 +231,7 @@ class Dataset_PKL_Multimodal_Classification(Dataset):
         if vl > 0:
             video_mask[:min(vl, video_mask.shape[0])] = 1.0
 
-        if self.task_mode == 'ordinal':
+        if self.task_mode in ['ordinal', 'regression']:
             raw_label = float(self.labels_reg[idx])
             ordinal_targets = self._map_label_ordinal(raw_label)
             return {
@@ -266,7 +266,6 @@ class Dataset_PKL_Multimodal_Classification(Dataset):
 
     def __len__(self):
         return len(self.indices)
-
 
 
 

@@ -1,0 +1,5 @@
+run_id,sweep,hyper_num_text,hyper_num_audio,hyper_num_video,kappa,accuracy,f1_macro,f1_weighted,status
+1,A1_balanced_no_ecr,30,20,10,0.0,0.7296,0.7179,0.7265,ok
+2,A2_capacity_no_ecr,50,30,15,0.0,0.7244,0.7097,0.72,ok
+3,A0_anchor_ecr,50,20,10,0.1,0.7241,0.7154,0.724,ok
+4,A2_capacity_ecr,50,30,15,0.1,0.7282,0.7177,0.7267,ok

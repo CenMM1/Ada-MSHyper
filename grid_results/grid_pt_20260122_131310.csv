@@ -1,0 +1,16 @@
+run_id,sweep,k,hyper_topk,hyper_tau,kappa,mae,corr,acc7,status
+1,hyperedge_num,2,3,0.5,0.1,,,,ok
+2,hyperedge_num,3,3,0.5,0.1,,,,ok
+3,hyperedge_num,4,3,0.5,0.1,,,,ok
+4,hyperedge_num,6,3,0.5,0.1,,,,ok
+5,sparsity_topk,3,2,0.5,0.1,,,,ok
+6,sparsity_topk,3,3,0.5,0.1,,,,ok
+7,sparsity_topk,3,4,0.5,0.1,,,,ok
+8,temperature_tau,3,3,0.3,0.1,,,,ok
+9,temperature_tau,3,3,0.5,0.1,,,,ok
+10,temperature_tau,3,3,0.7,0.1,,,,ok
+11,temperature_tau,3,3,1.0,0.1,,,,ok
+12,ecr_kappa,3,3,0.5,0.0,,,,ok
+13,ecr_kappa,3,3,0.5,0.05,,,,ok
+14,ecr_kappa,3,3,0.5,0.1,,,,ok
+15,ecr_kappa,3,3,0.5,0.2,,,,ok

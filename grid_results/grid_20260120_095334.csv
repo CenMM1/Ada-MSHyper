@@ -1,0 +1,3 @@
+run_id,loss_mode,combo,lr,hyper_num_text,hyper_num_audio,hyper_num_video,reg_loss_weight,reg_loss_type,reg_huber_delta,mae,corr,acc7,status
+4,coral,baseline,0.003,20,30,10,0.1,huber,1.0,0.9667,0.1443,0.3586,ok
+8,coral,ecr_warmup_only,0.003,20,30,10,0.1,huber,1.0,0.9941,0.1505,0.2945,ok

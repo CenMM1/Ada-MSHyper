@@ -78,7 +78,12 @@ def main():
                 if isinstance(batch[key], torch.Tensor):
                     batch[key] = batch[key].float().to(device)
             outputs, _ = model(batch)
-            pred = torch.sigmoid(outputs).sum(dim=1) - 3.0
+            if getattr(args, "task_mode", "classification") == "ordinal":
+                pred = torch.sigmoid(outputs).sum(dim=1) - 3.0
+            elif getattr(args, "task_mode", "classification") == "regression":
+                pred = outputs.squeeze(1) if outputs.dim() == 2 else outputs.view(-1)
+            else:
+                pred = outputs.argmax(dim=1).float()
             preds.append(pred.detach().cpu().numpy())
             if "label_reg" in batch:
                 true = batch["label_reg"].view(-1)
@@ -139,11 +144,14 @@ def main():
         "p90": float(np.percentile(y_pred, 90)),
     }
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    axes[0].scatter(y_true, y_pred, s=8, alpha=0.5)
-    axes[0].plot([-3, 3], [-3, 3], linestyle="--", color="gray", linewidth=1)
-    axes[0].set_xlabel("y_true")
-    axes[0].set_ylabel("y_pred")
-    axes[0].set_title("Pred vs True (Scatter)")
+    if y_true is not None:
+        axes[0].scatter(y_true, y_pred, s=8, alpha=0.5)
+        axes[0].plot([y_true.min(), y_true.max()], [y_true.min(), y_true.max()], linestyle="--", color="gray", linewidth=1)
+        axes[0].set_xlabel("y_true")
+        axes[0].set_ylabel("y_pred")
+        axes[0].set_title("Pred vs True (Scatter)")
+    else:
+        axes[0].set_title("Pred vs True (Scatter) - y_true not available")
 
     axes[1].hist(y_pred, bins=bin_edges, alpha=0.6, label="y_pred")
     if y_true is not None:
