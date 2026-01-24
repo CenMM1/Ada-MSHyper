@@ -27,8 +27,9 @@ class Exp_Main(Exp_Basic):
         self.reg_huber_delta = float(getattr(args, 'reg_huber_delta', 1.0))
         self.use_coral = bool(getattr(args, 'use_coral', 0))
         self.use_mosi_ecr = bool(getattr(args, 'use_mosi_ecr', 0))
-        self.ecr_warmup_epochs = int(getattr(args, 'ecr_warmup_epochs', 10))
+        self.ecr_warmup_epochs = int(getattr(args, 'ecr_warmup_epochs', 5))
         self.ecr_target_kappa = float(getattr(args, 'ecr_target_kappa', 0.0001))
+        self.ecr_weight = 0.0
         self.disable_epc = bool(getattr(args, 'disable_epc', 0))
         self._log_task_config()
 
@@ -117,10 +118,11 @@ class Exp_Main(Exp_Basic):
                 batch_data = self._move_batch_to_device(batch_data)
 
                 outputs, reg_loss = self.model(batch_data)
+                ecr_weight = getattr(self, 'ecr_weight', 0.0) if self.use_mosi_ecr else 0.0
                 if self.task_mode == 'ordinal':
                     targets = batch_data['label_ordinal']
                     reg_penalty = self._ordinal_reg_penalty(outputs, targets)
-                    loss = self._ordinal_loss(outputs, targets, criterion) + self.reg_weight * reg_loss + self.reg_loss_weight * reg_penalty
+                    task_loss = self._ordinal_loss(outputs, targets, criterion) + self.reg_loss_weight * reg_penalty
                     pred = torch.sigmoid(outputs).sum(dim=1) - 3.0
                     true = targets.sum(dim=1) - 3.0
                     mae, _, _, _, _, _, corr = metric(pred.detach().cpu().numpy(), true.detach().cpu().numpy())
@@ -129,15 +131,15 @@ class Exp_Main(Exp_Basic):
                 elif self.task_mode == 'regression':
                     targets = batch_data['label_reg']
                     pred = self._regression_outputs(outputs)
-                    loss = criterion(pred, targets)
+                    task_loss = criterion(pred, targets)
                     mae, _, _, _, _, _, corr = metric(pred.detach().cpu().numpy(), targets.detach().cpu().numpy())
                     metric_mae.append(mae)
                     metric_corr.append(corr)
                 else:
                     # 使用多模态标签作为目标
                     targets = batch_data['label_multimodal'].long()
-                    # 论文目标：L_total = L_ER + κ * L_ECR
-                    loss = criterion(outputs, targets) + reg_loss
+                    task_loss = criterion(outputs, targets)
+                loss = task_loss + ecr_weight * reg_loss
                 total_loss.append(loss)
 
         total_loss = torch.stack(total_loss).mean()
@@ -168,13 +170,14 @@ class Exp_Main(Exp_Basic):
             train_mae = []
             train_corr = []
 
-            if self.use_mosi_ecr and self.task_mode in ['ordinal', 'regression']:
+            global_ecr_weight = 0.0
+            if self.use_mosi_ecr:
                 if epoch < self.ecr_warmup_epochs:
-                    self.reg_weight = 0.0
+                    global_ecr_weight = 0.0
                 else:
                     progress = (epoch - self.ecr_warmup_epochs + 1) / max(1, (self.args.train_epochs - self.ecr_warmup_epochs))
-                    self.reg_weight = self.ecr_target_kappa * min(max(progress, 0.0), 1.0)
-
+                    global_ecr_weight = min(max(progress, 0.0), 1.0)
+            self.ecr_weight = global_ecr_weight
 
             for i, batch_data in enumerate(train_loader):
                 if i % 10 == 0:
@@ -187,7 +190,7 @@ class Exp_Main(Exp_Basic):
                 if self.task_mode == 'ordinal':
                     targets = batch_data['label_ordinal']
                     reg_penalty = self._ordinal_reg_penalty(outputs, targets)
-                    loss = self._ordinal_loss(outputs, targets, criterion) + self.reg_weight * reg_loss + self.reg_loss_weight * reg_penalty
+                    task_loss = self._ordinal_loss(outputs, targets, criterion) + self.reg_loss_weight * reg_penalty
                     pred = torch.sigmoid(outputs).sum(dim=1) - 3.0
                     true = targets.sum(dim=1) - 3.0
                     mae, _, _, _, _, _, corr = metric(pred.detach().cpu().numpy(), true.detach().cpu().numpy())
@@ -196,16 +199,16 @@ class Exp_Main(Exp_Basic):
                 elif self.task_mode == 'regression':
                     targets = batch_data['label_reg']
                     pred = self._regression_outputs(outputs)
-                    loss = criterion(pred, targets)
+                    task_loss = criterion(pred, targets)
                     mae, _, _, _, _, _, corr = metric(pred.detach().cpu().numpy(), targets.detach().cpu().numpy())
                     train_mae.append(mae)
                     train_corr.append(corr)
                 else:
                     # 使用多模态标签作为目标
                     targets = batch_data['label_multimodal'].long()
-                    # 论文目标：L_total = L_ER + κ * L_ECR
-                    loss = criterion(outputs, targets) + reg_loss
+                    task_loss = criterion(outputs, targets)
 
+                loss = task_loss + global_ecr_weight * reg_loss
                 train_loss.append(loss.item())
 
                 loss.backward()

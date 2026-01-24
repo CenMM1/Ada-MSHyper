@@ -81,10 +81,10 @@ def main():
     }
 
     sweep_plan = [
-        ("hyperedge_num", [2, 3, 4, 6], "k"),
-        ("sparsity_topk", [2, 3, 4], "hyper_topk"),
-        ("temperature_tau", [0.3, 0.5, 0.7, 1.0], "hyper_tau"),
-        ("ecr_kappa", [0.0, 0.05, 0.1, 0.2], "kappa"),
+        ("hyperedge_num", [3, 4], "k"),
+        ("sparsity_topk", [3], "hyper_topk"),
+        ("temperature_tau", [0.5, 1.0], "hyper_tau"),
+        ("ecr_kappa", [0.0, 0.01, 0.05, 0.1], "kappa"),
     ]
 
     dataset_tag = "pt"

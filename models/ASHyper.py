@@ -711,10 +711,16 @@ class MultimodalClassifier(nn.Module):
             masked_dist = dist_node_hyper * H  # [B, N, M]
             
             # 对每个节点，平均其关联超边的距离
-            node_degrees = H.sum(dim=2, keepdim=True)  # [B, N, 1]
-            node_degrees = torch.clamp(node_degrees, min=1e-8)  # 避免除零
-            ecd_per_node = (masked_dist.sum(dim=2) / node_degrees.squeeze(2))  # [B, N]
-            ecd_m = ecd_per_node.mean()  # 标量
+            
+            # 假设你有 mask 信息传入 compute_ecr_loss，或者从 node_degrees 推断
+            valid_nodes_mask = (node_degrees.squeeze(2) > 1e-7).float() # 度数大于0的才是有效节点
+            ecd_per_node = (masked_dist.sum(dim=2) / node_degrees.squeeze(2)) * valid_nodes_mask
+            # 只对有效节点求平均
+            num_valid_nodes = valid_nodes_mask.sum()
+            if num_valid_nodes > 0:
+                ecd_m = ecd_per_node.sum() / num_valid_nodes
+            else:
+                ecd_m = torch.tensor(0.0, device=hyper_repr.device)
             total_ecd += ecd_m
 
             # EPC: 超边间关系 - 向量化
